@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadet Music Assembler</title>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #e9ecef;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+        h1 { color: #333; margin-top: 0; text-align: center; }
+        
+        /* 3-Column Layout */
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 250px 1fr 40vw; /* Left, Middle, Right */
+            gap: 20px;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        .panel { 
+            background: white; 
+            padding: 15px; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        h2 { font-size: 18px; margin-top: 0; border-bottom: 2px solid #0056b3; padding-bottom: 5px; color: #0056b3;}
+        
+        /* Left Panel - Songs */
+        .song-checkbox-group { display: flex; flex-direction: column; gap: 10px; }
+        .song-checkbox-group label { cursor: pointer; padding: 5px; background: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;}
+        .song-checkbox-group label:hover { background: #e2e6ea; }
+
+        /* Middle Panel - Instrument, Part & Queue */
+        select, button { padding: 8px; font-size: 14px; border-radius: 4px; }
+        select { width: 100%; border: 1px solid #ccc; margin-bottom: 15px; margin-top: 5px; }
+        
+        .part-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            margin-bottom: 8px;
+            border-radius: 4px;
+        }
+        .btn-group { display: flex; gap: 5px; }
+        .btn-preview { background-color: #6c757d; color: white; border: none; cursor: pointer; }
+        .btn-add { background-color: #28a745; color: white; border: none; cursor: pointer; }
+        .btn-remove { background-color: #dc3545; color: white; border: none; cursor: pointer; }
+        
+        .compilation-queue { margin-top: 20px; flex-grow: 1; border-top: 2px dashed #ccc; padding-top: 15px;}
+        #generate-btn { 
+            background-color: #0056b3; 
+            color: white; 
+            border: none; 
+            cursor: pointer; 
+            width: 100%;
+            font-size: 16px;
+            padding: 12px;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        #generate-btn:hover { background-color: #004494; }
+        #generate-btn:disabled { background-color: #a0c4e8; cursor: not-allowed; }
+
+        /* Right Panel - Preview */
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Cadet Music Assembler</h1>
+    
+    <div class="layout-grid">
+        
+        <div class="panel">
+            <h2>1. Select Songs Needed</h2>
+            <div id="song-list" class="song-checkbox-group">
+                </div>
+        </div>
+
+        <div class="panel">
+            <h2>2. Select Parts to Add</h2>
+            
+            <label for="instrument-select"><strong>Instrument:</strong></label>
+            <select id="instrument-select">
+                <option value="">-- Choose Instrument --</option>
+                <option value="Flute">Flute</option>
+                <option value="Clarinet">Clarinet</option>
+                <option value="Alto Sax">Alto Sax</option>
+                <option value="Trumpet">Trumpet</option>
+                <option value="Tenor Sax">Tenor Sax</option>
+                <option value="Trombone">Trombone</option>
+                <option value="Euphonium">Euphonium</option>
+                <option value="Tuba">Tuba</option>
+                <option value="Percussion">Percussion</option>
+            </select>
+
+            <label for="part-select"><strong>Part:</strong></label>
+            <select id="part-select">
+                <option value="">-- Choose Part --</option>
+                <option value="Part A">Part A</option>
+                <option value="Part B">Part B</option>
+                <option value="Part C">Part C</option>
+                <option value="Part D">Part D</option>
+                <option value="Drums">Drums/Percussion</option>
+            </select>
+
+            <div id="available-parts-list">
+                <p style="color: #666; font-size: 14px;">Select songs, instrument, and part to see available music.</p>
+            </div>
+
+            <div class="compilation-queue">
+                <h2>3. Cadet's Custom Booklet</h2>
+                <div id="queue-list">
+                    <p style="color: #666; font-size: 14px;">No parts added yet.</p>
+                </div>
+                <button onclick="generateCompilationPdf()" id="generate-btn" style="display: none;">Generate Booklet PDF</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Preview</h2>
+            <iframe id="preview-frame" src="about:blank" title="PDF Preview"></iframe>
+        </div>
+
+    </div>
+
+    <script>
+        // --- 1. Database Configuration ---
+        // Catalog mapping Songs to Instruments to Parts
+        const catalog = [
+            // Ceremonial Card
+            { song: "Ceremonial Card", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_ceremonial_card.pdf" },
+            { song: "Ceremonial Card", instrument: "Percussion", partName: "Perc", file: "pdfs/Percussion/A_ceremonial_card.pdf" },
+
+            // The Men of Harlech
+            { song: "The Men of Harlech", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_men_of_harlech.pdf" },
+            { song: "The Men of Harlech", instrument: "Percussion", partName: "Perc", file: "pdfs/Percussion/A_men_of_harlech.pdf" },
+
+            // Meet the Flintstones
+            { song: "Meet the Flintstones", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_meet_the_flintstones.pdf" },
+            { song: "Meet the Flintstones", instrument: "Percussion", partName: "Perc", file: "pdfs/Percussion/A_meet_the_flintstones.pdf" }
+            ];
+
+        // --- 2. State Variables ---
+        let compilationQueue = []; 
+
+        // --- 3. UI Initialization ---
+        const songListContainer = document.getElementById('song-list');
+        const instrumentSelect = document.getElementById('instrument-select');
+        const partSelect = document.getElementById('part-select');
+        const availablePartsList = document.getElementById('available-parts-list');
+        const queueList = document.getElementById('queue-list');
+        const previewFrame = document.getElementById('preview-frame');
+        const generateBtn = document.getElementById('generate-btn');
+
+        // Extract unique songs for the left menu
+        const uniqueSongs = [...new Set(catalog.map(item => item.song))];
+
+        // Populate Songs (Left Column)
+        uniqueSongs.forEach(song => {
+            const label = document.createElement('label');
+            label.innerHTML = `<input type="checkbox" class="song-filter" value="${song}"> ${song}`;
+            songListContainer.appendChild(label);
+        });
+
+        // Event Listeners for Filters
+        document.querySelectorAll('.song-filter').forEach(cb => cb.addEventListener('change', updateAvailableParts));
+        instrumentSelect.addEventListener('change', updateAvailableParts);
+        partSelect.addEventListener('change', updateAvailableParts);
+
+        // --- 4. Core Application Logic ---
+
+        function updateAvailableParts() {
+            // Get selected filters
+            const checkedSongs = Array.from(document.querySelectorAll('.song-filter:checked')).map(cb => cb.value);
+            const selectedInstrument = instrumentSelect.value;
+            const selectedPart = partSelect.value;
+
+            availablePartsList.innerHTML = ''; // Clear list
+
+            // Check if all three criteria are selected
+            if (checkedSongs.length === 0 || !selectedInstrument || !selectedPart) {
+                availablePartsList.innerHTML = '<p style="color: #666; font-size: 14px;">Select songs, instrument, and part to see available music.</p>';
+                return;
+            }
+
+            // Filter catalog for selected songs AND instrument AND part
+            const matchingParts = catalog.filter(item => 
+                checkedSongs.includes(item.song) && 
+                item.instrument === selectedInstrument &&
+                item.partName === selectedPart
+            );
+
+            if (matchingParts.length === 0) {
+                availablePartsList.innerHTML = '<p style="color: #dc3545; font-size: 14px;">No music found for this specific combination.</p>';
+                return;
+            }
+
+            // Render matching parts
+            matchingParts.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'part-item';
+                div.innerHTML = `
+                    <div><strong>${item.song}</strong><br><small>${item.instrument} - ${item.partName}</small></div>
+                    <div class="btn-group">
+                        <button class="btn-preview" onclick="previewPdf('${item.file}')">Preview</button>
+                        <button class="btn-add" onclick="addToQueue('${item.song}', '${item.instrument}', '${item.partName}', '${item.file}')">Add</button>
+                    </div>
+                `;
+                availablePartsList.appendChild(div);
+            });
+        }
+
+        function previewPdf(filePath) {
+            previewFrame.src = filePath;
+        }
+
+        function addToQueue(song, instrument, partName, file) {
+            // Prevent exact duplicates
+            const exists = compilationQueue.find(item => item.file === file);
+            if (exists) {
+                alert("This part is already in the cadet's booklet!");
+                return;
+            }
+
+            compilationQueue.push({ song, instrument, partName, file });
+            renderQueue();
+        }
+
+        function removeFromQueue(index) {
+            compilationQueue.splice(index, 1);
+            renderQueue();
+        }
+
+        function renderQueue() {
+            queueList.innerHTML = '';
+            
+            if (compilationQueue.length === 0) {
+                queueList.innerHTML = '<p style="color: #666; font-size: 14px;">No parts added yet.</p>';
+                generateBtn.style.display = 'none';
+                return;
+            }
+
+            generateBtn.style.display = 'block';
+
+            compilationQueue.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'part-item';
+                div.innerHTML = `
+                    <div><strong>${item.song}</strong><br><small>${item.instrument} - ${item.partName}</small></div>
+                    <button class="btn-remove" onclick="removeFromQueue(${index})">Remove</button>
+                `;
+                queueList.appendChild(div);
+            });
+        }
+
+        // --- 5. PDF Generation Logic ---
+        async function generateCompilationPdf() {
+            const { PDFDocument } = PDFLib;
+            
+            generateBtn.innerText = "Compiling... Please wait.";
+            generateBtn.disabled = true;
+
+            try {
+                const mergedPdf = await PDFDocument.create();
+
+                for (const item of compilationQueue) {
+                    const response = await fetch(item.file);
+                    if (!response.ok) {
+                        console.error(`Could not load ${item.file}.`);
+                        continue;
+                    }
+                    const existingPdfBytes = await response.arrayBuffer();
+                    const pdfToMerge = await PDFDocument.load(existingPdfBytes);
+                    
+                    const copiedPages = await mergedPdf.copyPages(pdfToMerge, pdfToMerge.getPageIndices());
+                    copiedPages.forEach(page => mergedPdf.addPage(page));
+                }
+
+                const pdfBytes = await mergedPdf.save();
+                
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                // Generate filename based on the first item's instrument and part in the queue
+                let instTag = compilationQueue[0].instrument.replace('/', '_').replace(' ', '');
+                let partTag = compilationQueue[0].partName.replace(' ', '');
+                a.download = `Cadet_Booklet_${instTag}_${partTag}.pdf`;
+                
+                document.body.appendChild(a);
+                a.click();
+                
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                // Optional: Clear queue for the next cadet
+                if(confirm("Booklet downloaded! Clear the list for the next cadet?")) {
+                    compilationQueue = [];
+                    renderQueue();
+                }
+
+            } catch (error) {
+                console.error("Error generating PDF:", error);
+                alert("An error occurred merging the PDFs. Ensure you are running this on a local server.");
+            } finally {
+                generateBtn.innerText = "Generate Booklet PDF";
+                generateBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
