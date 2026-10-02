@@ -7,7 +7,7 @@
     <!-- pdf-lib for combining PDF documents -->
     <!-- TODO: Add SRI integrity hash when verified: integrity="sha384-..." -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
-    <!-- EmailJS SDK v4 for forgot password emails -->
+    <!-- EmailJS SDK v4 for me forgot password emails -->
     <!-- TODO: Add SRI integrity hash when verified: integrity="sha384-..." -->
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js" crossorigin="anonymous"></script>
     <style>
@@ -602,15 +602,6 @@
                     <label for="instrument-select"><strong>Instrument:</strong></label>
                     <select id="instrument-select" onchange="renderAvailableParts()">
                         <option value="">-- Choose Instrument --</option>
-                        <option value="Flute">Flute</option>
-                        <option value="Clarinet">Clarinet</option>
-                        <option value="Alto Sax">Alto Sax</option>
-                        <option value="Trumpet">Trumpet</option>
-                        <option value="Tenor Sax">Tenor Sax</option>
-                        <option value="Trombone">Trombone</option>
-                        <option value="Euphonium">Euphonium</option>
-                        <option value="Tuba">Tuba</option>
-                        <option value="Percussion">Percussion</option>
                     </select>
 
                     <div id="available-parts-list" style="margin-top: 10px;">
@@ -656,16 +647,13 @@
 
                         <div class="form-group">
                             <label>Include Sheet Music Parts For:</label>
-                            <div class="instrument-grid">
-                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Trumpet" checked> Trumpet</label>
-                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Clarinet" checked> Clarinet</label>
-                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Flute" checked> Flute</label>
-                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Alto Sax" checked> Alto Sax</label>
-                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Tenor Sax" checked> Tenor Sax</label>
-                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Trombone" checked> Trombone</label>
-                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Euphonium" checked> Euphonium</label>
-                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Tuba" checked> Tuba</label>
-                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Percussion" checked> Percussion</label>
+                            <div id="instrument-grid-container" class="instrument-grid">
+                                <!-- Populated dynamically by renderInstrumentGrid() -->
+                            </div>
+                            <!-- Custom Instrument Adder -->
+                            <div style="margin-top: 8px; display: flex; gap: 5px;">
+                                <input type="text" id="custom-instrument-input" placeholder="Add custom instrument (e.g. Oboe, French Horn)" style="font-size: 12px; padding: 4px 8px;">
+                                <button type="button" class="btn-primary" onclick="handleAddCustomInstrument()" style="font-size: 11px; padding: 4px 10px; white-space: nowrap;">+ Add Instrument</button>
                             </div>
                         </div>
 
@@ -887,7 +875,6 @@
                 if (instrument === 'Percussion') {
                     instMatched = tokens.some(t => ['percussion', 'drums', 'drum', 'perc'].includes(t));
                 } else if (instrument === 'Tenor Sax') {
-                    // Specific guard to prevent "Tenor Sax" matching "Alto Sax" or vice-versa
                     instMatched = tokens.includes('tenor') && (tokens.includes('sax') || tokens.includes('saxophone'));
                 } else if (instrument === 'Alto Sax') {
                     instMatched = tokens.includes('alto') && (tokens.includes('sax') || tokens.includes('saxophone'));
@@ -919,7 +906,6 @@
                         partScore = 5;
                     }
                 } else {
-                    // Pass 1: explicit Part X indicator or full part name sequence preferred over bare letter code
                     if (hasPartCodeSequence || hasPartCodeCombined || hasFullPartNameSeq) {
                         partMatched = true;
                         partScore = 15;
@@ -1049,7 +1035,12 @@
             return res.hash === storedHash;
         }
 
-        // --- 3. BASE DEFAULT CATALOG ---
+        // --- 3. BASE DEFAULT CATALOG & INSTRUMENTS ---
+        const DEFAULT_INSTRUMENTS = [
+            "Trumpet", "Clarinet", "Flute", "Alto Sax", 
+            "Tenor Sax", "Trombone", "Euphonium", "Tuba", "Percussion"
+        ];
+
         const initialCatalog = [
             { id: "def-1", song: "Ceremonial Card", category: "Ceremonial", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_ceremonial_card.pdf" },
             { id: "def-2", song: "Ceremonial Card", category: "Ceremonial", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_ceremonial_card.pdf" },
@@ -1076,6 +1067,7 @@
         let isSignUpMode = false;
         let uploadedPdfFiles = [];
         let catalog = [];
+        let customInstruments = [];
         let selectedSongs = [];
         let compilationQueue = [];
         let selectedAdminIds = new Set();
@@ -1219,6 +1211,7 @@
                         iterations: hashRes.iterations,
                         email: email,
                         role: "admin",
+                        customInstruments: [],
                         catalog: initialCatalog.map(c => ({...c, id: generateUUID()}))
                     };
                     saveAccountsDb(db);
@@ -1253,6 +1246,7 @@
             currentAccountNormalized = normKey;
             currentAccount = acc.displayName || normKey;
             currentUserRole = acc.role || "user";
+            customInstruments = Array.isArray(acc.customInstruments) ? acc.customInstruments : [];
 
             sessionStorage.setItem("cadet_active_user", normKey);
             document.getElementById('current-account-display').textContent = currentAccount;
@@ -1266,12 +1260,15 @@
             loadAccountCatalog();
             await checkUrlImport();
             updateCategoriesAndFilters();
+            renderInstrumentGrid();
+            renderInstrumentDropdown();
             renderUserSongs();
             renderAdminTable();
         }
 
         function clearUserState() {
             catalog = [];
+            customInstruments = [];
             selectedSongs = [];
             compilationQueue = [];
             selectedAdminIds.clear();
@@ -1329,9 +1326,111 @@
             const db = getAccountsDb();
             if (Object.hasOwn(db, currentAccountNormalized)) {
                 db[currentAccountNormalized].catalog = catalog;
+                db[currentAccountNormalized].customInstruments = customInstruments;
                 saveAccountsDb(db);
             }
             updateCategoriesAndFilters();
+        }
+
+        // --- INSTRUMENT MANAGEMENT HELPERS ---
+        function getAllInstruments() {
+            const set = new Set([...DEFAULT_INSTRUMENTS, ...customInstruments]);
+            return Array.from(set);
+        }
+
+        function renderInstrumentGrid() {
+            const container = document.getElementById('instrument-grid-container');
+            if (!container) return;
+
+            const allInsts = getAllInstruments();
+            container.innerHTML = '';
+
+            allInsts.forEach(inst => {
+                const label = document.createElement('label');
+                label.className = 'checkbox-label';
+                
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'inst-check';
+                cb.value = inst;
+                cb.checked = true;
+
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(' ' + inst));
+
+                if (customInstruments.includes(inst)) {
+                    const removeBtn = document.createElement('span');
+                    removeBtn.textContent = ' ✕';
+                    removeBtn.title = 'Remove Custom Instrument';
+                    removeBtn.style.color = 'var(--danger)';
+                    removeBtn.style.cursor = 'pointer';
+                    removeBtn.style.fontWeight = 'bold';
+                    removeBtn.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleRemoveCustomInstrument(inst);
+                    };
+                    label.appendChild(removeBtn);
+                }
+
+                container.appendChild(label);
+            });
+        }
+
+        function renderInstrumentDropdown() {
+            const select = document.getElementById('instrument-select');
+            if (!select) return;
+
+            const currentVal = select.value;
+            select.innerHTML = '<option value="">-- Choose Instrument --</option>';
+
+            const allInsts = getAllInstruments();
+            allInsts.forEach(inst => {
+                const opt = document.createElement('option');
+                opt.value = inst;
+                opt.textContent = inst;
+                select.appendChild(opt);
+            });
+
+            select.value = currentVal;
+        }
+
+        function handleAddCustomInstrument() {
+            if (!requireAdmin()) return;
+
+            const input = document.getElementById('custom-instrument-input');
+            const newInst = input.value.trim();
+
+            if (!newInst) {
+                showToast("Please enter an instrument name.", "warning");
+                return;
+            }
+
+            const allInsts = getAllInstruments();
+            if (allInsts.some(i => i.toLowerCase() === newInst.toLowerCase())) {
+                showToast("Instrument already exists.", "warning");
+                return;
+            }
+
+            customInstruments.push(newInst);
+            saveCatalog();
+            renderInstrumentGrid();
+            renderInstrumentDropdown();
+            input.value = '';
+            showToast(`Added custom instrument "${newInst}".`, "success");
+        }
+
+        function handleRemoveCustomInstrument(inst) {
+            if (!requireAdmin()) return;
+
+            if (confirm(`Remove custom instrument "${inst}"? Existing catalog entries for this instrument will remain intact.`)) {
+                customInstruments = customInstruments.filter(i => i !== inst);
+                saveCatalog();
+                renderInstrumentGrid();
+                renderInstrumentDropdown();
+                renderAvailableParts();
+                showToast(`Removed instrument "${inst}".`, "info");
+            }
         }
 
         function resetSelectionState() {
@@ -1361,7 +1460,6 @@
                 }
             }
 
-            // Treat current catalog as live as well
             catalog.forEach(item => {
                 if (item.pdfStoreId) activeBlobsInOtherAccounts.add(item.pdfStoreId);
             });
@@ -1375,12 +1473,15 @@
 
         async function resetToDefaultCatalog() {
             if (!requireAdmin()) return;
-            if (confirm("Reset catalog back to defaults? All uploaded sheet music and added songs will be cleared.")) {
+            if (confirm("Reset catalog back to defaults? All uploaded sheet music, custom instruments, and added songs will be cleared.")) {
                 const oldCatalog = [...catalog];
                 catalog = initialCatalog.map(c => ({...c, id: generateUUID()}));
+                customInstruments = [];
                 saveCatalog();
                 await cleanupOrphanedPdfBlobs(oldCatalog);
                 resetSelectionState();
+                renderInstrumentGrid();
+                renderInstrumentDropdown();
                 renderUserSongs();
                 renderAdminTable();
                 showToast("Catalog reset to defaults.", "info");
@@ -1419,7 +1520,6 @@
                     return;
                 }
 
-                // 16 bytes for high entropy temp password
                 const array = new Uint8Array(16);
                 crypto.getRandomValues(array);
                 const tempPw = "cadet-" + Array.from(array, b => b.toString(16).padStart(2,'0')).join('');
@@ -1631,6 +1731,8 @@
             } else {
                 document.getElementById('nav-btn-admin').classList.add('active');
                 document.getElementById('page-admin').classList.add('active');
+                renderInstrumentGrid();
+                renderInstrumentDropdown();
                 renderAdminTable();
                 updateCategoriesAndFilters();
             }
@@ -2054,7 +2156,6 @@
                 const preset = document.getElementById('admin-preset').value;
                 const onlyMatched = document.getElementById('admin-only-matched').checked;
 
-                // Reuse existing casing if song exists
                 const existingEntry = catalog.find(c => c.song.toLowerCase() === songNameInput.toLowerCase());
                 const songName = existingEntry ? existingEntry.song : songNameInput;
 
@@ -2165,7 +2266,7 @@
                     if (skippedDuplicates > 0) msg += ` ${skippedDuplicates} duplicates were skipped.`;
                     if (skippedUnmatched > 0) msg += ` ${skippedUnmatched} unmatched parts skipped.`;
                     showToast(msg, "warning");
-                    return; // Retain form inputs and uploads list
+                    return;
                 }
 
                 saveCatalog();
@@ -2465,7 +2566,6 @@
                 }
 
                 if (confirm(`Import shared catalog with ${decoded.length} items? WARNING: Shared links carry song metadata only, NOT uploaded PDF files. Importing will REPLACE your current catalog structure.`)) {
-                    // Do NOT clean up PDF blobs on share link import so existing stored PDFs are retained
                     catalog = decoded.map(item => {
                         validateCatalogItem(item);
                         item.id = generateUUID();
@@ -2568,6 +2668,7 @@
                 const backupObj = {
                     version: 2,
                     catalog: catalog,
+                    customInstruments: customInstruments,
                     pdfs: pdfStoreMap
                 };
 
@@ -2637,6 +2738,9 @@
                         newCatalog = parsed;
                     } else if (parsed && parsed.version === 2 && Array.isArray(parsed.catalog)) {
                         newCatalog = parsed.catalog;
+                        if (Array.isArray(parsed.customInstruments)) {
+                            customInstruments = parsed.customInstruments;
+                        }
                         const pdfs = parsed.pdfs || {};
 
                         for (const [oldPdfId, b64Data] of Object.entries(pdfs)) {
@@ -2674,6 +2778,8 @@
                     saveCatalog();
                     await cleanupOrphanedPdfBlobs(oldCatalog);
                     resetSelectionState();
+                    renderInstrumentGrid();
+                    renderInstrumentDropdown();
                     renderAdminTable();
                     renderUserSongs();
                     showToast("Music database loaded into account!", "success");
@@ -2685,95 +2791,6 @@
                 }
             };
             reader.readAsText(file);
-        }
-
-        // --- TEST SUITE ---
-        function runFilenameMatcherTests() {
-            const results = [];
-            
-            function mockFile(rawName) {
-                return { rawName, tokens: tokenizeFilename(rawName), used: false };
-            }
-
-            // Test Case 1: ["Trumpet_Part_B.pdf", "Trumpet_Part_A.pdf"] -> A gets Part_A, B gets Part_B, C/D get nothing
-            {
-                const files = [mockFile("Trumpet_Part_B.pdf"), mockFile("Trumpet_Part_A.pdf")];
-                const parts = [
-                    { name: "Part A", code: "A" },
-                    { name: "Part B", code: "B" },
-                    { name: "Part C", code: "C" },
-                    { name: "Part D", code: "D" }
-                ];
-                const matches = parts.map(p => {
-                    const m = matchPdfToPart(files, "Trumpet", p);
-                    if (m) m.used = true;
-                    return m ? m.rawName : null;
-                });
-                results.push({ test: 1, expected: ["Trumpet_Part_A.pdf", "Trumpet_Part_B.pdf", null, null], got: matches });
-            }
-
-            // Test Case 2: ["Trumpet_Part_A.pdf"] only -> B, C, D get nothing
-            {
-                const files = [mockFile("Trumpet_Part_A.pdf")];
-                const parts = [{ name: "Part A", code: "A" }, { name: "Part B", code: "B" }];
-                const matches = parts.map(p => {
-                    const m = matchPdfToPart(files, "Trumpet", p);
-                    if (m) m.used = true;
-                    return m ? m.rawName : null;
-                });
-                results.push({ test: 2, expected: ["Trumpet_Part_A.pdf", null], got: matches });
-            }
-
-            // Test Case 3: ["Clarinet_Part_A.pdf"] -> Part C gets nothing
-            {
-                const files = [mockFile("Clarinet_Part_A.pdf")];
-                const m = matchPdfToPart(files, "Clarinet", { name: "Part C", code: "C" });
-                results.push({ test: 3, expected: null, got: m ? m.rawName : null });
-            }
-
-            // Test Case 4: ["Colonel_Bogey_Trumpet_A.pdf"] -> Part B gets nothing, Part A matches
-            {
-                const files = [mockFile("Colonel_Bogey_Trumpet_A.pdf")];
-                const mA = matchPdfToPart(files, "Trumpet", { name: "Part A", code: "A" });
-                if (mA) mA.used = true;
-                const mB = matchPdfToPart(files, "Trumpet", { name: "Part B", code: "B" });
-                results.push({ test: 4, expected: { A: "Colonel_Bogey_Trumpet_A.pdf", B: null }, got: { A: mA ? mA.rawName : null, B: mB ? mB.rawName : null } });
-            }
-
-            // Test Case 5: ["Percussion.pdf"] and ["Drums.pdf"] -> match Percussion part
-            {
-                const files1 = [mockFile("Percussion.pdf")];
-                const m1 = matchPdfToPart(files1, "Percussion", { name: "Drums/Percussion", code: "A" });
-                const files2 = [mockFile("Drums.pdf")];
-                const m2 = matchPdfToPart(files2, "Percussion", { name: "Drums/Percussion", code: "A" });
-                results.push({ test: 5, expected: ["Percussion.pdf", "Drums.pdf"], got: [m1 ? m1.rawName : null, m2 ? m2.rawName : null] });
-            }
-
-            // Test Case 6: ["Tenor_Sax_Part_A.pdf"] must not match Alto Sax
-            {
-                const files = [mockFile("Tenor_Sax_Part_A.pdf")];
-                const m = matchPdfToPart(files, "Alto Sax", { name: "Part A", code: "A" });
-                results.push({ test: 6, expected: null, got: m ? m.rawName : null });
-            }
-
-            // Test Case 7: Unmatched file "Tenor_Saxophone_Part_A.pdf" doesn't match "Tenor Sax"
-            {
-                const files = [mockFile("Tenor_Saxophone_Part_A.pdf")];
-                const m = matchPdfToPart(files, "Tenor Sax", { name: "Part A", code: "A" });
-                results.push({ test: 7, expected: "Tenor_Saxophone_Part_A.pdf", got: m ? m.rawName : null });
-            }
-
-            // Test Case 8: "A_Mighty_Fortress_Trumpet_Part_B.pdf" doesn't steal Part A
-            {
-                const files = [mockFile("A_Mighty_Fortress_Trumpet_Part_B.pdf")];
-                const mA = matchPdfToPart(files, "Trumpet", { name: "Part A", code: "A" });
-                if (mA) mA.used = true;
-                const mB = matchPdfToPart(files, "Trumpet", { name: "Part B", code: "B" });
-                results.push({ test: 8, expected: { A: null, B: "A_Mighty_Fortress_Trumpet_Part_B.pdf" }, got: { A: mA ? mA.rawName : null, B: mB ? mB.rawName : null } });
-            }
-
-            console.log("PDF Filename Matching Tests Results:", results);
-            return results;
         }
     </script>
 </body>
