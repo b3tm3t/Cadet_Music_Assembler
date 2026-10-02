@@ -666,7 +666,7 @@
                             </div>
                             <!-- Custom Instrument Adder -->
                             <div style="margin-top: 8px; display: flex; gap: 5px;">
-                                <input type="text" id="custom-instrument-input" placeholder="Add custom instrument (e.g. Oboe, French Horn)" style="font-size: 12px; padding: 4px 8px;">
+                                <input type="text" id="custom-instrument-input" placeholder="Add custom instrument (e.g. Bass Clarinet, Oboe)" style="font-size: 12px; padding: 4px 8px;">
                                 <button type="button" class="btn-primary" onclick="handleAddCustomInstrument()" style="font-size: 11px; padding: 4px 10px; white-space: nowrap;">+ Add Instrument</button>
                             </div>
                         </div>
@@ -674,7 +674,7 @@
                         <div class="form-group">
                             <label>Part Layout Setup:</label>
                             <select id="admin-preset" onchange="togglePresetCustomization()">
-                                <option value="standard">Standard Band (Parts A, B, C, D + Drums)</option>
+                                <option value="standard">Standard Band (Parts A, B, C, D)</option>
                                 <option value="lead-only">Lead Melody Only (Part A)</option>
                                 <option value="custom">Custom Part Names</option>
                             </select>
@@ -873,10 +873,16 @@
             return false;
         }
 
+        // List of known instrument modifiers/qualifiers
+        const KNOWN_QUALIFIERS = ["bass", "alto", "tenor", "soprano", "piccolo", "contra", "baritone", "treble"];
+
         function matchPdfToPart(fileBuffers, instrument, partObj) {
             const normInst = tokenizeFilename(instrument);
             const partCodeToken = partObj.code.toLowerCase();
             const normPartName = tokenizeFilename(partObj.name);
+
+            // Identify qualifiers present in the target instrument (e.g., 'bass' in 'Bass Clarinet')
+            const instQualifiers = normInst.filter(t => KNOWN_QUALIFIERS.includes(t));
 
             let bestMatch = null;
             let bestScore = -1;
@@ -886,14 +892,23 @@
                 const tokens = f.tokens || tokenizeFilename(f.rawName);
 
                 let instMatched = false;
-                if (instrument === 'Percussion') {
-                    instMatched = tokens.some(t => ['percussion', 'drums', 'drum', 'perc'].includes(t));
-                } else if (instrument === 'Tenor Sax') {
-                    instMatched = tokens.includes('tenor') && (tokens.includes('sax') || tokens.includes('saxophone'));
-                } else if (instrument === 'Alto Sax') {
-                    instMatched = tokens.includes('alto') && (tokens.includes('sax') || tokens.includes('saxophone'));
+
+                // Precision check for instrument pairs (e.g. Bass Clarinet vs Clarinet, Alto Sax vs Tenor Sax)
+                if (instQualifiers.length > 0) {
+                    // Target instrument HAS a qualifier (e.g. "Bass Clarinet")
+                    // File MUST contain all required qualifiers and the instrument sequence
+                    const hasAllQualifiers = instQualifiers.every(q => tokens.includes(q));
+                    const hasBaseInst = isSubsequenceContiguous(normInst, tokens);
+                    instMatched = hasAllQualifiers && hasBaseInst;
                 } else {
-                    instMatched = isSubsequenceContiguous(normInst, tokens);
+                    // Target instrument does NOT have a qualifier (e.g. "Clarinet")
+                    // File MUST NOT contain qualifiers that distinguish derivative instruments (unless part of target)
+                    const containsOtherQualifier = KNOWN_QUALIFIERS.some(q => tokens.includes(q));
+                    if (containsOtherQualifier) {
+                        instMatched = false;
+                    } else {
+                        instMatched = isSubsequenceContiguous(normInst, tokens);
+                    }
                 }
 
                 if (!instMatched) continue;
@@ -912,21 +927,12 @@
                 const hasPartCodeCombined = tokens.includes('part' + partCodeToken);
                 const hasFullPartNameSeq = normPartName.length > 0 && isSubsequenceContiguous(normPartName, tokens);
 
-                if (instrument === 'Percussion' && partObj.name === 'Drums/Percussion') {
+                if (hasPartCodeSequence || hasPartCodeCombined || hasFullPartNameSeq) {
                     partMatched = true;
-                    if (hasStandaloneCode || hasPartCodeSequence || hasPartCodeCombined || hasFullPartNameSeq) {
-                        partScore = 10;
-                    } else {
-                        partScore = 5;
-                    }
-                } else {
-                    if (hasPartCodeSequence || hasPartCodeCombined || hasFullPartNameSeq) {
-                        partMatched = true;
-                        partScore = 15;
-                    } else if (hasStandaloneCode) {
-                        partMatched = true;
-                        partScore = 8;
-                    }
+                    partScore = 15;
+                } else if (hasStandaloneCode) {
+                    partMatched = true;
+                    partScore = 8;
                 }
 
                 if (partMatched && partScore > bestScore) {
@@ -1051,8 +1057,8 @@
 
         // --- 3. BASE DEFAULT CATALOG & INSTRUMENTS ---
         const DEFAULT_INSTRUMENTS = [
-            "Trumpet", "Clarinet", "Flute", "Alto Sax", 
-            "Tenor Sax", "Trombone", "Euphonium", "Tuba", "Percussion"
+            "Trumpet", "Clarinet", "Bass Clarinet", "Flute", "Alto Sax", 
+            "Tenor Sax", "Trombone", "Baritone", "Tuba"
         ];
 
         const initialCatalog = [
@@ -1060,7 +1066,6 @@
             { id: "def-2", song: "Ceremonial Card", category: "Ceremonial", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_ceremonial_card.pdf" },
             { id: "def-3", song: "Ceremonial Card", category: "Ceremonial", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_ceremonial_card.pdf" },
             { id: "def-4", song: "Ceremonial Card", category: "Ceremonial", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_ceremonial_card.pdf" },
-            { id: "def-5", song: "Ceremonial Card", category: "Ceremonial", instrument: "Percussion", partName: "Drums/Percussion", file: "pdfs/Percussion/A_ceremonial_card.pdf" },
             { id: "def-6", song: "The Men of Harlech", category: "March", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_men_of_harlech.pdf" },
             { id: "def-7", song: "The Men of Harlech", category: "March", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_men_of_harlech.pdf" },
             { id: "def-8", song: "The Men of Harlech", category: "March", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_men_of_harlech.pdf" },
@@ -1435,12 +1440,10 @@
                 return;
             }
 
-            // Capture current checkbox states before adding the new instrument
             const currentCheckedMap = {};
             document.querySelectorAll('.inst-check').forEach(cb => {
                 currentCheckedMap[cb.value] = cb.checked;
             });
-            // Newly added custom instrument defaults to checked for convenience
             currentCheckedMap[newInst] = true;
 
             customInstruments.push(newInst);
@@ -1455,7 +1458,6 @@
             if (!requireAdmin()) return;
 
             if (confirm(`Remove custom instrument "${inst}"? Existing catalog entries for this instrument will remain intact.`)) {
-                // Preserve remaining checkbox states
                 const currentCheckedMap = {};
                 document.querySelectorAll('.inst-check').forEach(cb => {
                     if (cb.value !== inst) {
@@ -2258,11 +2260,7 @@
                 for (const inst of selectedInstruments) {
                     const cleanInstFolder = inst.replace(/[^a-zA-Z0-9]/g, '_');
 
-                    const partsToIterate = (inst === 'Percussion') 
-                        ? [{ name: "Drums/Percussion", code: "A" }] 
-                        : parts;
-
-                    for (const partObj of partsToIterate) {
+                    for (const partObj of parts) {
                         const exists = catalog.some(c => 
                             c.song.toLowerCase() === songName.toLowerCase() &&
                             c.instrument === inst &&
@@ -2337,7 +2335,7 @@
                 document.getElementById('add-song-form').reset();
                 uploadedPdfFiles = [];
                 renderUploadedFilesList();
-                renderInstrumentGrid(); // Re-render grid so checkboxes reset to default unchecked state for new entry
+                renderInstrumentGrid({}); // Reset checkboxes to all unchecked
                 togglePresetCustomization();
             } finally {
                 submitBtn.disabled = false;
