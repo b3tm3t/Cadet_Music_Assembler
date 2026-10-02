@@ -7,7 +7,7 @@
     <!-- pdf-lib for combining PDF documents -->
     <!-- TODO: Add SRI integrity hash when verified: integrity="sha384-..." -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
-    <!-- EmailJS SDK v4 for me forgot password emails -->
+    <!-- EmailJS SDK v4 for forgot password emails -->
     <!-- TODO: Add SRI integrity hash when verified: integrity="sha384-..." -->
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js" crossorigin="anonymous"></script>
     <style>
@@ -218,9 +218,20 @@
             font-size: 16px;
             padding: 12px;
             font-weight: bold;
-            margin-top: 15px;
         }
         #generate-btn:hover { background-color: var(--primary-hover); }
+
+        #preview-booklet-btn {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            font-size: 14px;
+            padding: 10px;
+            font-weight: bold;
+        }
+        #preview-booklet-btn:hover { background-color: #5a6268; }
 
         iframe {
             width: 100%;
@@ -613,7 +624,10 @@
                         <div id="queue-list">
                             <p style="color: #666; font-size: 14px;">No parts added yet.</p>
                         </div>
-                        <button onclick="generateCompilationPdf()" id="generate-btn" style="display: none;">Generate Booklet PDF</button>
+                        <div id="booklet-action-buttons" style="display: none; margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+                            <button onclick="generateCompilationPdf(true)" id="preview-booklet-btn">Preview Booklet</button>
+                            <button onclick="generateCompilationPdf(false)" id="generate-btn">Generate Booklet PDF</button>
+                        </div>
                     </div>
                 </div>
 
@@ -1338,9 +1352,18 @@
             return Array.from(set);
         }
 
-        function renderInstrumentGrid() {
+        function renderInstrumentGrid(preservedCheckedMap = null) {
             const container = document.getElementById('instrument-grid-container');
             if (!container) return;
+
+            // Capture existing checkbox states if no preservation map was explicitly provided
+            if (!preservedCheckedMap) {
+                preservedCheckedMap = {};
+                const existingCheckboxes = container.querySelectorAll('.inst-check');
+                existingCheckboxes.forEach(cb => {
+                    preservedCheckedMap[cb.value] = cb.checked;
+                });
+            }
 
             const allInsts = getAllInstruments();
             container.innerHTML = '';
@@ -1353,7 +1376,7 @@
                 cb.type = 'checkbox';
                 cb.className = 'inst-check';
                 cb.value = inst;
-                cb.checked = true;
+                cb.checked = preservedCheckedMap[inst] === true;
 
                 label.appendChild(cb);
                 label.appendChild(document.createTextNode(' ' + inst));
@@ -1412,9 +1435,17 @@
                 return;
             }
 
+            // Capture current checkbox states before adding the new instrument
+            const currentCheckedMap = {};
+            document.querySelectorAll('.inst-check').forEach(cb => {
+                currentCheckedMap[cb.value] = cb.checked;
+            });
+            // Newly added custom instrument defaults to checked for convenience
+            currentCheckedMap[newInst] = true;
+
             customInstruments.push(newInst);
             saveCatalog();
-            renderInstrumentGrid();
+            renderInstrumentGrid(currentCheckedMap);
             renderInstrumentDropdown();
             input.value = '';
             showToast(`Added custom instrument "${newInst}".`, "success");
@@ -1424,9 +1455,17 @@
             if (!requireAdmin()) return;
 
             if (confirm(`Remove custom instrument "${inst}"? Existing catalog entries for this instrument will remain intact.`)) {
+                // Preserve remaining checkbox states
+                const currentCheckedMap = {};
+                document.querySelectorAll('.inst-check').forEach(cb => {
+                    if (cb.value !== inst) {
+                        currentCheckedMap[cb.value] = cb.checked;
+                    }
+                });
+
                 customInstruments = customInstruments.filter(i => i !== inst);
                 saveCatalog();
-                renderInstrumentGrid();
+                renderInstrumentGrid(currentCheckedMap);
                 renderInstrumentDropdown();
                 renderAvailableParts();
                 showToast(`Removed instrument "${inst}".`, "info");
@@ -1942,11 +1981,11 @@
 
         function renderQueue() {
             const container = document.getElementById('queue-list');
-            const genBtn = document.getElementById('generate-btn');
+            const actionButtons = document.getElementById('booklet-action-buttons');
 
             if (compilationQueue.length === 0) {
                 container.innerHTML = '<p style="color: #666; font-size: 14px;">No parts added yet.</p>';
-                genBtn.style.display = 'none';
+                if (actionButtons) actionButtons.style.display = 'none';
                 return;
             }
 
@@ -1968,10 +2007,10 @@
                 container.appendChild(div);
             });
 
-            genBtn.style.display = 'block';
+            if (actionButtons) actionButtons.style.display = 'flex';
         }
 
-        async function generateCompilationPdf() {
+        async function generateCompilationPdf(isPreviewOnly = false) {
             if (compilationQueue.length === 0) return;
 
             if (typeof PDFLib === 'undefined' || !PDFLib.PDFDocument) {
@@ -1980,9 +2019,14 @@
             }
 
             const genBtn = document.getElementById('generate-btn');
-            const originalText = genBtn.textContent;
-            genBtn.disabled = true;
-            genBtn.textContent = "Generating...";
+            const prevBtn = document.getElementById('preview-booklet-btn');
+            
+            if (genBtn) genBtn.disabled = true;
+            if (prevBtn) prevBtn.disabled = true;
+
+            const activeBtn = isPreviewOnly ? prevBtn : genBtn;
+            const originalText = activeBtn ? activeBtn.textContent : "";
+            if (activeBtn) activeBtn.textContent = isPreviewOnly ? "Loading Preview..." : "Generating...";
 
             const failedFiles = [];
             let successCount = 0;
@@ -2040,21 +2084,24 @@
                 const iframe = document.getElementById('preview-frame');
                 iframe.src = activePreviewBlobUrl;
 
-                const link = document.createElement('a');
-                link.href = activePreviewBlobUrl;
-                link.download = `Cadet_Music_Booklet.pdf`;
-                link.click();
+                if (!isPreviewOnly) {
+                    const link = document.createElement('a');
+                    link.href = activePreviewBlobUrl;
+                    link.download = `Cadet_Music_Booklet.pdf`;
+                    link.click();
+                }
 
                 if (failedFiles.length > 0) {
-                    alert(`Booklet created with ${successCount} parts.\n\nThe following ${failedFiles.length} files could not be included:\n- ` + failedFiles.join("\n- "));
+                    alert(`Booklet compiled with ${successCount} parts.\n\nThe following ${failedFiles.length} files could not be included:\n- ` + failedFiles.join("\n- "));
                 } else {
-                    showToast("Booklet compiled successfully!", "success");
+                    showToast(isPreviewOnly ? "Booklet preview updated!" : "Booklet compiled successfully!", "success");
                 }
             } catch(e) {
                 showToast("Error generating PDF: " + e.message, "error");
             } finally {
-                genBtn.disabled = false;
-                genBtn.textContent = originalText;
+                if (genBtn) genBtn.disabled = false;
+                if (prevBtn) prevBtn.disabled = false;
+                if (activeBtn) activeBtn.textContent = originalText;
             }
         }
 
@@ -2290,6 +2337,7 @@
                 document.getElementById('add-song-form').reset();
                 uploadedPdfFiles = [];
                 renderUploadedFilesList();
+                renderInstrumentGrid(); // Re-render grid so checkboxes reset to default unchecked state for new entry
                 togglePresetCustomization();
             } finally {
                 submitBtn.disabled = false;
