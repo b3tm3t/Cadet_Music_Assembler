@@ -3,32 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cadet Music Assembler</title>
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <title>Cadet Music Assembler & Manager</title>
+    <!-- pdf-lib for combining PDF documents -->
+    <!-- TODO: Add SRI integrity hash when verified: integrity="sha384-..." -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" crossorigin="anonymous"></script>
+    <!-- EmailJS SDK v4 for forgot password emails -->
+    <!-- TODO: Add SRI integrity hash when verified: integrity="sha384-..." -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js" crossorigin="anonymous"></script>
     <style>
+        :root {
+            --primary: #0056b3;
+            --primary-hover: #004494;
+            --bg: #e9ecef;
+            --card-bg: #ffffff;
+            --border: #dee2e6;
+            --text: #333333;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --header-bg: #1a252f;
+            --header-tab: #2c3e50;
+            --header-tab-hover: #34495e;
+        }
+
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             margin: 0; 
-            padding: 20px; 
-            background-color: #e9ecef;
-            height: 100vh;
-            box-sizing: border-box;
+            padding: 0; 
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            min-height: 100dvh;
             display: flex;
             flex-direction: column;
+            overflow-x: hidden;
         }
-        h1 { color: #333; margin-top: 0; text-align: center; }
-        
-        /* 3-Column Layout */
-        .layout-grid {
-            display: grid;
-            grid-template-columns: 250px 1fr 40vw; /* Left, Middle, Right */
-            gap: 20px;
+
+        /* Toast Notifications */
+        #toast-container {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: #333;
+            color: white;
+            padding: 12px 18px;
+            border-radius: 6px;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.2s ease-out;
+            max-width: 350px;
+        }
+
+        .toast.success { background: #1e7e34; }
+        .toast.error { background: #bd2130; }
+        .toast.info { background: #117a8b; }
+        .toast.warning { background: #d39e00; color: #212529; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Top Header */
+        header {
+            background-color: var(--header-bg);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 10;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .account-badge {
+            background: #34495e;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab-btn {
+            background: #2c3e50;
+            color: #ecf0f1;
+            border: 1px solid #455a64;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .tab-btn:hover { 
+            background: #34495e; 
+        }
+
+        .tab-btn.active { 
+            background: var(--primary);
+            color: white; 
+            border: none;
+        }
+
+        /* Main View Container */
+        .view-container {
             flex-grow: 1;
-            overflow: hidden;
+            display: flex;
+            position: relative;
+            overflow-y: auto;
+        }
+
+        .view-page {
+            width: 100%;
+            height: 100%;
+            display: none;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .view-page.active { display: flex; }
+
+        /* USER APP LAYOUT */
+        .user-grid {
+            display: grid;
+            grid-template-columns: 300px 1fr 40vw;
+            gap: 20px;
+            width: 100%;
+            height: 100%;
         }
 
         .panel { 
-            background: white; 
+            background: var(--card-bg); 
             padding: 15px; 
             border-radius: 8px; 
             box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
@@ -37,16 +175,21 @@
             overflow-y: auto;
         }
 
-        h2 { font-size: 18px; margin-top: 0; border-bottom: 2px solid #0056b3; padding-bottom: 5px; color: #0056b3;}
+        h2 { font-size: 18px; margin-top: 0; border-bottom: 2px solid var(--primary); padding-bottom: 5px; color: var(--primary);}
         
-        /* Left Panel - Songs */
-        .song-checkbox-group { display: flex; flex-direction: column; gap: 10px; }
-        .song-checkbox-group label { cursor: pointer; padding: 5px; background: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;}
+        .filter-box {
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .song-checkbox-group { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+        .song-checkbox-group label { cursor: pointer; padding: 8px; background: #f8f9fa; border-radius: 4px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;}
         .song-checkbox-group label:hover { background: #e2e6ea; }
 
-        /* Middle Panel - Instrument, Part & Queue */
-        select, button { padding: 8px; font-size: 14px; border-radius: 4px; }
-        select { width: 100%; border: 1px solid #ccc; margin-bottom: 15px; margin-top: 5px; }
+        select, input[type="text"], input[type="password"], input[type="email"], button { padding: 8px; font-size: 14px; border-radius: 4px; }
+        select, input[type="text"], input[type="password"], input[type="email"] { width: 100%; border: 1px solid #ccc; box-sizing: border-box;}
         
         .part-item {
             display: flex;
@@ -54,18 +197,20 @@
             align-items: center;
             padding: 10px;
             background: #f8f9fa;
-            border: 1px solid #dee2e6;
+            border: 1px solid var(--border);
             margin-bottom: 8px;
             border-radius: 4px;
         }
         .btn-group { display: flex; gap: 5px; }
         .btn-preview { background-color: #6c757d; color: white; border: none; cursor: pointer; }
-        .btn-add { background-color: #28a745; color: white; border: none; cursor: pointer; }
-        .btn-remove { background-color: #dc3545; color: white; border: none; cursor: pointer; }
-        
+        .btn-add { background-color: var(--success); color: white; border: none; cursor: pointer; }
+        .btn-remove { background-color: var(--danger); color: white; border: none; cursor: pointer; }
+        .btn-primary { background-color: var(--primary); color: white; border: none; cursor: pointer; }
+        .btn-primary:hover { background-color: var(--primary-hover); }
+
         .compilation-queue { margin-top: 20px; flex-grow: 1; border-top: 2px dashed #ccc; padding-top: 15px;}
         #generate-btn { 
-            background-color: #0056b3; 
+            background-color: var(--primary); 
             color: white; 
             border: none; 
             cursor: pointer; 
@@ -75,495 +220,2560 @@
             font-weight: bold;
             margin-top: 15px;
         }
-        #generate-btn:hover { background-color: #004494; }
-        #generate-btn:disabled { background-color: #a0c4e8; cursor: not-allowed; }
+        #generate-btn:hover { background-color: var(--primary-hover); }
 
-        /* Right Panel - Preview */
         iframe {
             width: 100%;
             height: 100%;
+            min-height: 400px;
             border: 1px solid #ccc;
             border-radius: 4px;
             background-color: #f8f9fa;
+        }
+
+        /* ADMIN SITE LAYOUT */
+        .admin-layout {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 20px;
+            width: 100%;
+            height: 100%;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .badge {
+            background-color: #e2e6ea;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #495057;
+            font-weight: bold;
+        }
+
+        .badge-upload {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .badge-default {
+            background-color: #e2e6ea;
+            color: #495057;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .badge-missing {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            max-height: 420px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th { background: #f1f3f5; position: sticky; top: 0; z-index: 5; }
+
+        .instrument-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            padding: 8px;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .info-box {
+            background-color: #e7f3fe;
+            border-left: 4px solid #2196F3;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .warning-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            border-radius: 0 4px 4px 0;
+            color: #856404;
+        }
+
+        .bulk-action-bar {
+            background: #f8f9fa;
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Drag & Drop Upload Zone */
+        .drop-zone {
+            border: 2px dashed #0056b3;
+            background: #f0f7ff;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            background: #e1f0ff;
+        }
+
+        .file-list {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .file-chip {
+            background: #e9ecef;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* MODAL OVERLAYS */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-card {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            width: 400px;
+            max-width: 90vw;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-card h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 8px;
+        }
+
+        .text-link {
+            color: var(--primary);
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: underline;
+        }
+
+        .text-link:hover {
+            color: var(--primary-hover);
+        }
+
+        /* Responsive Layout Overrides */
+        @media (max-width: 1000px) {
+            .user-grid {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            .admin-layout {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            body {
+                overflow-y: auto;
+            }
+            .view-container {
+                overflow-y: visible;
+            }
         }
     </style>
 </head>
 <body>
 
-    <h1>Cadet Music Assembler</h1>
-    
-    <div class="layout-grid">
-        
-        <div class="panel">
-            <h2>1. Select Songs Needed</h2>
-            <div id="song-list" class="song-checkbox-group">
-                </div>
-        </div>
+    <div id="toast-container"></div>
 
-        <div class="panel">
-            <h2>2. Select Parts to Add</h2>
+    <!-- AUTHENTICATION MODAL -->
+    <div id="auth-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <div class="modal-card">
+            <h2 id="auth-title">Cadet Music Login</h2>
             
-            <label for="instrument-select"><strong>Instrument:</strong></label>
-            <select id="instrument-select">
-                <option value="">-- Choose Instrument --</option>
-                <option value="Flute">Flute</option>
-                <option value="Clarinet">Clarinet</option>
-                <option value="Alto Sax">Alto Sax</option>
-                <option value="Trumpet">Trumpet</option>
-                <option value="Tenor Sax">Tenor Sax</option>
-                <option value="Trombone">Trombone</option>
-                <option value="Euphonium">Euphonium</option>
-                <option value="Tuba">Tuba</option>
-                <option value="Percussion">Percussion</option>
-            </select>
+            <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+                <div class="form-group">
+                    <label for="auth-account-name">Account / Corps Name *</label>
+                    <input type="text" id="auth-account-name" required placeholder="e.g. 2317 RCACC" autocomplete="username">
+                </div>
 
-            <label for="part-select"><strong>Part:</strong></label>
-            <select id="part-select">
-                <option value="">-- Choose Part --</option>
-                <option value="Part A">Part A</option>
-                <option value="Part B">Part B</option>
-                <option value="Part C">Part C</option>
-                <option value="Part D">Part D</option>
-                <option value="Drums">Drums/Percussion</option>
-            </select>
+                <div class="form-group" id="email-group" style="display: none;">
+                    <label for="auth-email">Email Address *</label>
+                    <input type="email" id="auth-email" placeholder="officer@cadets.gc.ca">
+                </div>
 
-            <div id="available-parts-list">
-                <p style="color: #666; font-size: 14px;">Select songs, instrument, and part to see available music.</p>
+                <div class="form-group">
+                    <label for="auth-password">Password *</label>
+                    <input type="password" id="auth-password" required placeholder="••••••••" autocomplete="current-password">
+                </div>
+
+                <div class="form-group" id="confirm-password-group" style="display: none;">
+                    <label for="auth-confirm-password">Confirm Password *</label>
+                    <input type="password" id="auth-confirm-password" placeholder="••••••••" autocomplete="new-password">
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <span id="forgot-pw-link" class="text-link" role="button" tabindex="0" onclick="openForgotPasswordModal()" onkeydown="handleKeyClick(event, openForgotPasswordModal)">Forgot Password?</span>
+                    <span id="toggle-auth-mode" class="text-link" role="button" tabindex="0" onclick="toggleAuthMode()" onkeydown="handleKeyClick(event, toggleAuthMode)">Create New Account</span>
+                </div>
+
+                <button type="submit" id="auth-submit-btn" class="btn-primary" style="width: 100%; padding: 10px; font-weight: bold;">Login to Library</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- FORGOT PASSWORD MODAL -->
+    <div id="forgot-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="forgot-title">
+        <div class="modal-card">
+            <h2 id="forgot-title">Reset Password</h2>
+            <p style="font-size: 13px; color: #666;">Enter your Account Name and registered Email. A temporary password will be sent to your email.</p>
+
+            <form id="forgot-pw-form" onsubmit="handleForgotPassword(event)">
+                <div class="form-group">
+                    <label for="reset-account-name">Account Name *</label>
+                    <input type="text" id="reset-account-name" required placeholder="e.g. 2317 RCACC" autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="reset-email">Registered Email *</label>
+                    <input type="email" id="reset-email" required placeholder="officer@cadets.gc.ca">
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button type="button" class="btn-remove" onclick="closeForgotPasswordModal()" style="flex: 1;">Cancel</button>
+                    <button type="submit" id="forgot-pw-submit-btn" class="btn-primary" style="flex: 1;">Send Reset Email</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ACCOUNT MANAGER MODAL -->
+    <div id="account-manager-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="mgr-title">
+        <div class="modal-card">
+            <h2 id="mgr-title">Account Manager Settings</h2>
+            
+            <div class="form-group">
+                <label for="mgr-account-name">Account Name *</label>
+                <input type="text" id="mgr-account-name" required>
             </div>
 
-            <div class="compilation-queue">
-                <h2>3. Cadet's Custom Booklet</h2>
-                <div id="queue-list">
-                    <p style="color: #666; font-size: 14px;">No parts added yet.</p>
+            <div class="form-group">
+                <label for="mgr-email">Email Address *</label>
+                <input type="email" id="mgr-email" required>
+            </div>
+
+            <button class="btn-primary" onclick="updateAccountInfo()" style="width: 100%; margin-bottom: 15px;">Update Account Info</button>
+
+            <hr style="margin: 15px 0; border: none; border-top: 1px solid var(--border);">
+
+            <h3 style="font-size: 15px; margin: 0 0 10px 0;">Change Password</h3>
+            <div class="form-group">
+                <input type="password" id="mgr-curr-password" placeholder="Current Password" autocomplete="current-password">
+            </div>
+            <div class="form-group">
+                <input type="password" id="mgr-new-password" placeholder="New Password" autocomplete="new-password">
+            </div>
+            <button class="btn-primary" onclick="changeAccountPassword()" style="width: 100%; margin-bottom: 20px;">Change Password</button>
+
+            <div id="admin-account-management" style="margin-bottom: 15px; display: none;">
+                <hr style="margin: 15px 0; border: none; border-top: 1px solid var(--border);">
+                <h3 style="font-size: 15px; margin: 0 0 10px 0;">Manage Accounts & Roles</h3>
+                <div id="accounts-role-list" style="max-height: 120px; overflow-y: auto; font-size: 13px; border: 1px solid var(--border); padding: 5px; border-radius: 4px; margin-bottom: 10px;"></div>
+            </div>
+
+            <div style="font-size: 11px; color: #666; margin-bottom: 15px; font-style: italic;">
+                Note: Accounts and music catalogs are stored locally in this browser only.
+            </div>
+
+            <div style="display: flex; justify-content: space-between; gap: 10px;">
+                <button class="btn-remove" onclick="deleteCurrentAccount()" style="flex: 1;">Delete Account</button>
+                <button class="tab-btn" onclick="closeAccountManager()" style="flex: 1; background: #6c757d;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <header>
+        <h1>Cadet Music Assembler & Manager</h1>
+        <div class="header-actions">
+            <div class="account-badge">
+                👤 <span id="current-account-display">Not Logged In</span>
+                <span id="role-badge" class="badge" style="background:#007bff; color:white; font-size:9px; margin-left:4px;">USER</span>
+                <button onclick="openAccountManager()" style="font-size: 10px; padding: 2px 6px; cursor: pointer; background: white; color: black; border: none; border-radius: 3px; margin-left: 6px;">Manage</button>
+                <button onclick="logout()" style="font-size: 10px; padding: 2px 6px; cursor: pointer; background: #dc3545; color: white; border: none; border-radius: 3px;">Switch</button>
+            </div>
+            <div class="nav-tabs">
+                <button class="tab-btn active" id="nav-btn-assembler" onclick="switchTab('assembler')">Cadet Music Assembler</button>
+                <button class="tab-btn" id="nav-btn-admin" onclick="switchTab('admin')">Admin Control Panel</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- VIEW CONTAINER -->
+    <div class="view-container">
+
+        <!-- PAGE 1: CADET MUSIC ASSEMBLER -->
+        <div id="page-assembler" class="view-page active">
+            <div class="user-grid">
+                <!-- Left Panel -->
+                <div class="panel">
+                    <h2>1. Select Songs Needed</h2>
+                    <div class="filter-box">
+                        <input type="text" id="song-search" placeholder="🔍 Search songs..." oninput="renderUserSongs()">
+                        <select id="category-filter" onchange="renderUserSongs()">
+                            <option value="">-- All Categories --</option>
+                        </select>
+                    </div>
+                    <div id="song-list" class="song-checkbox-group"></div>
                 </div>
-                <button onclick="generateCompilationPdf()" id="generate-btn" style="display: none;">Generate Booklet PDF</button>
+
+                <!-- Middle Panel -->
+                <div class="panel">
+                    <h2>2. Select Parts to Add</h2>
+                    
+                    <label for="instrument-select"><strong>Instrument:</strong></label>
+                    <select id="instrument-select" onchange="renderAvailableParts()">
+                        <option value="">-- Choose Instrument --</option>
+                        <option value="Flute">Flute</option>
+                        <option value="Clarinet">Clarinet</option>
+                        <option value="Alto Sax">Alto Sax</option>
+                        <option value="Trumpet">Trumpet</option>
+                        <option value="Tenor Sax">Tenor Sax</option>
+                        <option value="Trombone">Trombone</option>
+                        <option value="Euphonium">Euphonium</option>
+                        <option value="Tuba">Tuba</option>
+                        <option value="Percussion">Percussion</option>
+                    </select>
+
+                    <div id="available-parts-list" style="margin-top: 10px;">
+                        <p style="color: #666; font-size: 14px;">Select songs and an instrument to see all available parts.</p>
+                    </div>
+
+                    <div class="compilation-queue">
+                        <h2>3. Cadet's Custom Booklet</h2>
+                        <div id="queue-list">
+                            <p style="color: #666; font-size: 14px;">No parts added yet.</p>
+                        </div>
+                        <button onclick="generateCompilationPdf()" id="generate-btn" style="display: none;">Generate Booklet PDF</button>
+                    </div>
+                </div>
+
+                <!-- Right Panel -->
+                <div class="panel">
+                    <h2>Preview</h2>
+                    <iframe id="preview-frame" src="about:blank" title="PDF Preview"></iframe>
+                </div>
             </div>
         </div>
 
-        <div class="panel">
-            <h2>Preview</h2>
-            <iframe id="preview-frame" src="about:blank" title="PDF Preview"></iframe>
+        <!-- PAGE 2: ADMIN CONTROL PANEL -->
+        <div id="page-admin" class="view-page">
+            <div class="admin-layout">
+                
+                <!-- Admin Column 1: Add New Song Wizard -->
+                <div class="panel">
+                    <h2>Add New Song & Upload Sheet Music PDFs</h2>
+                    <form id="add-song-form" onsubmit="handleCreateSong(event)">
+                        
+                        <div class="form-group">
+                            <label for="admin-song-name">Song Name *</label>
+                            <input type="text" id="admin-song-name" required placeholder="e.g. Maple Leaf Forever">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="admin-category">Category / Music Type *</label>
+                            <input type="text" id="admin-category" list="category-suggestions" required placeholder="Choose or type a new category (e.g. March, Hymn, Ceremonial)">
+                            <datalist id="category-suggestions"></datalist>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Include Sheet Music Parts For:</label>
+                            <div class="instrument-grid">
+                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Trumpet" checked> Trumpet</label>
+                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Clarinet" checked> Clarinet</label>
+                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Flute" checked> Flute</label>
+                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Alto Sax" checked> Alto Sax</label>
+                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Tenor Sax" checked> Tenor Sax</label>
+                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Trombone" checked> Trombone</label>
+                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Euphonium" checked> Euphonium</label>
+                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Tuba" checked> Tuba</label>
+                                <label class="checkbox-label"><input type="checkbox" class="inst-check" value="Percussion" checked> Percussion</label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Part Layout Setup:</label>
+                            <select id="admin-preset" onchange="togglePresetCustomization()">
+                                <option value="standard">Standard Band (Parts A, B, C, D + Drums)</option>
+                                <option value="lead-only">Lead Melody Only (Part A)</option>
+                                <option value="custom">Custom Part Names</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="custom-parts-group" style="display: none;">
+                            <label for="admin-custom-parts">Custom Parts (separate by comma):</label>
+                            <input type="text" id="admin-custom-parts" placeholder="Part A, Part B, Bassline">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="admin-only-matched" checked>
+                                Only create parts that have a matching PDF
+                            </label>
+                        </div>
+
+                        <!-- Multi-PDF Upload Dropzone -->
+                        <div class="form-group">
+                            <label>Upload Sheet Music PDF Files (Optional Multiple Files):</label>
+                            <div class="drop-zone" role="button" tabindex="0" onclick="document.getElementById('pdf-file-input').click()" onkeydown="handleKeyClick(event, () => document.getElementById('pdf-file-input').click())" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleFileDrop(event)">
+                                📄 <strong>Click or Drag & Drop Multiple PDF Files Here</strong>
+                                <br><small style="color:#666;">Filenames with instrument and part (e.g., Alto_Sax_Part_A.pdf) will auto-attach cleanly without false fallbacks!</small>
+                                <input type="file" id="pdf-file-input" accept="application/pdf" multiple style="display: none;" onchange="handleFileSelect(event)">
+                            </div>
+                            <div id="uploaded-files-list" class="file-list"></div>
+                        </div>
+
+                        <button type="submit" id="add-song-submit-btn" class="btn-primary" style="padding: 10px; font-weight: bold; width: 100%;">Add Song & Save All Parts</button>
+                    </form>
+
+                    <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">
+
+                    <h2>Sharing & Syncing Options</h2>
+                    <div class="warning-box">
+                        <strong>Security & Storage Note:</strong> Catalog metadata is synchronized locally. Uploaded PDF files are stored in browser IndexedDB. Large binary PDFs are excluded from share URL links to avoid link truncation.
+                    </div>
+                    
+                    <button class="btn-primary" onclick="copyShareableUrl()" style="margin-bottom: 10px; width: 100%;">Copy Direct Metadata Share Link</button>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn-primary" onclick="exportDatabaseFile()" style="flex: 1; background-color: #17a2b8;">Save Backup File</button>
+                        <label class="tab-btn" role="button" tabindex="0" style="flex: 1; text-align: center; background-color: #6c757d; cursor: pointer; padding: 8px 0; font-size:14px;" onkeydown="handleKeyClick(event, () => document.getElementById('import-db-file').click())">
+                            Load Backup File <input type="file" id="import-db-file" accept=".cadet,.json" onchange="importDatabaseFile(event)" style="display: none;">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Admin Column 2: Song Directory -->
+                <div class="panel">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h2 style="margin: 0; border: none;">Current Account Music Library</h2>
+                        <button class="btn-remove" onclick="resetToDefaultCatalog()" style="font-size: 11px;">Reset Defaults</button>
+                    </div>
+
+                    <div style="margin-bottom: 10px; display: flex; gap: 10px;">
+                        <input type="text" id="admin-search-table" placeholder="Search song, instrument, or category..." oninput="onAdminFilterChange()">
+                        <select id="admin-category-filter" onchange="onAdminFilterChange()">
+                            <option value="">All Categories</option>
+                        </select>
+                    </div>
+
+                    <!-- Bulk Actions Control Bar -->
+                    <div class="bulk-action-bar">
+                        <span id="selected-count-label" style="font-size: 13px; font-weight: bold; color: #555;">0 items selected</span>
+                        <button class="btn-remove" onclick="deleteSelectedItems()" id="bulk-delete-btn" disabled style="font-size: 12px; opacity: 0.5;">Delete Selected Parts</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 30px;"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAllAdmin(this)"></th>
+                                    <th>Song Title</th>
+                                    <th>Category</th>
+                                    <th>Instrument</th>
+                                    <th>Part</th>
+                                    <th>PDF Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-table-body">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
         </div>
 
     </div>
 
     <script>
-        // --- 1. Database Configuration ---
-        // Catalog mapping Songs to Instruments to Parts
-        const catalog = [
-            // Ceremonial Card
-            { song: "Ceremonial Card", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_ceremonial_card.pdf" },
-            { song: "Ceremonial Card", instrument: "Percussion", partName: "Drums/Percussion", file: "pdfs/Percussion/A_ceremonial_card.pdf" },
+        /*
+         * ARCHITECTURAL & SECURITY LIMITATIONS NOTE:
+         * 1. Client-Side Authentication: Authentication and authorization checks are conducted entirely client-side 
+         *    within localStorage/JS runtime. Local storage or JS variables can be modified via DevTools.
+         * 2. Public API Credentials: EmailJS Public Keys and Template/Service IDs are exposed in source client code.
+         *    To prevent abuse, configure Domain Restrictions / Allowed Origins inside the EmailJS Admin Dashboard.
+         */
 
-            // The Men of Harlech
-            { song: "The Men of Harlech", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_men_of_harlech.pdf" },
-            { song: "The Men of Harlech", instrument: "Percussion", partName: "Drums/Percussion", file: "pdfs/Percussion/A_men_of_harlech.pdf" },
+        // --- 0. UTILITY & SECURITY HELPERS ---
 
-            // Meet the Flintstones
-            { song: "Meet the Flintstones", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_meet_the_flintstones.pdf" },
-            { song: "Meet the Flintstones", instrument: "Percussion", partName: "Drums/Percussion", file: "pdfs/Percussion/A_meet_the_flintstones.pdf" },
-
-            // Abide With Me
-            { song: "Abide With Me", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_abide_with_me.pdf" },
-            { song: "Abide With Me", instrument: "Percussion", partName: "Drums/Percussion", file: "pdfs/Percussion/A_abide_with_me.pdf" },
-
-            // Colonel Bogey
-            { song: "Colonel Bogey", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_colonel_bogey.pdf" },
-            { song: "Colonel Bogey", instrument: "Percussion", partName: "Drums/Percussion", file: "pdfs/Percussion/A_colonel_bogey.pdf" },
-
-            // Heart of Oak
-            { song: "Heart of Oak", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_heart_of_oak.pdf" },
-            { song: "Heart of Oak", instrument: "Percussion", partName: "Drums/Percussion", file: "pdfs/Percussion/A_heart_of_oak.pdf" },
-
-            // Sunset
-            { song: "Sunset", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_sunset.pdf" },
-            { song: "Sunset", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_sunset.pdf" },
-            { song: "Sunset", instrument: "Trumpet", partName: "Part C", file: "pdfs/Trumpet/C_sunset.pdf" },
-            { song: "Sunset", instrument: "Trumpet", partName: "Part D", file: "pdfs/Trumpet/D_sunset.pdf" },
-            { song: "Sunset", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_sunset.pdf" },
-            { song: "Sunset", instrument: "Clarinet", partName: "Part B", file: "pdfs/Clarinet/B_sunset.pdf" },
-            { song: "Sunset", instrument: "Clarinet", partName: "Part C", file: "pdfs/Clarinet/C_sunset.pdf" },
-            { song: "Sunset", instrument: "Clarinet", partName: "Part D", file: "pdfs/Clarinet/D_sunset.pdf" },
-            { song: "Sunset", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_sunset.pdf" },
-            { song: "Sunset", instrument: "Flute", partName: "Part B", file: "pdfs/Flute/B_sunset.pdf" },
-            { song: "Sunset", instrument: "Flute", partName: "Part C", file: "pdfs/Flute/C_sunset.pdf" },
-            { song: "Sunset", instrument: "Flute", partName: "Part D", file: "pdfs/Flute/D_sunset.pdf" },
-            { song: "Sunset", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_sunset.pdf" },
-            { song: "Sunset", instrument: "Alto Sax", partName: "Part B", file: "pdfs/Alto_Sax/B_sunset.pdf" },
-            { song: "Sunset", instrument: "Alto Sax", partName: "Part C", file: "pdfs/Alto_Sax/C_sunset.pdf" },
-            { song: "Sunset", instrument: "Alto Sax", partName: "Part D", file: "pdfs/Alto_Sax/D_sunset.pdf" },
-            { song: "Sunset", instrument: "Tenor Sax", partName: "Part A", file: "pdfs/Tenor_Sax/A_sunset.pdf" },
-            { song: "Sunset", instrument: "Tenor Sax", partName: "Part B", file: "pdfs/Tenor_Sax/B_sunset.pdf" },
-            { song: "Sunset", instrument: "Tenor Sax", partName: "Part C", file: "pdfs/Tenor_Sax/C_sunset.pdf" },
-            { song: "Sunset", instrument: "Tenor Sax", partName: "Part D", file: "pdfs/Tenor_Sax/D_sunset.pdf" },
-            { song: "Sunset", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_sunset.pdf" },
-            { song: "Sunset", instrument: "Trombone", partName: "Part B", file: "pdfs/Trombone/B_sunset.pdf" },
-            { song: "Sunset", instrument: "Trombone", partName: "Part C", file: "pdfs/Trombone/C_sunset.pdf" },
-            { song: "Sunset", instrument: "Trombone", partName: "Part D", file: "pdfs/Trombone/D_sunset.pdf" },
-            { song: "Sunset", instrument: "Euphonium", partName: "Part A", file: "pdfs/Euphonium/A_sunset.pdf" },
-            { song: "Sunset", instrument: "Euphonium", partName: "Part B", file: "pdfs/Euphonium/B_sunset.pdf" },
-            { song: "Sunset", instrument: "Euphonium", partName: "Part C", file: "pdfs/Euphonium/C_sunset.pdf" },
-            { song: "Sunset", instrument: "Euphonium", partName: "Part D", file: "pdfs/Euphonium/D_sunset.pdf" },
-            { song: "Sunset", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_sunset.pdf" },
-            { song: "Sunset", instrument: "Tuba", partName: "Part B", file: "pdfs/Tuba/B_sunset.pdf" },
-            { song: "Sunset", instrument: "Tuba", partName: "Part C", file: "pdfs/Tuba/C_sunset.pdf" },
-            { song: "Sunset", instrument: "Tuba", partName: "Part D", file: "pdfs/Tuba/D_sunset.pdf" },
-            { song: "Sunset", instrument: "Percussion", partName: "Drums/Percussion", file: "pdfs/Percussion/A_sunset.pdf" },
-            ];
-
-        // --- 2. State Variables ---
-        let compilationQueue = []; 
-
-        // --- 3. UI Initialization ---
-        const songListContainer = document.getElementById('song-list');
-        const instrumentSelect = document.getElementById('instrument-select');
-        const partSelect = document.getElementById('part-select');
-        const availablePartsList = document.getElementById('available-parts-list');
-        const queueList = document.getElementById('queue-list');
-        const previewFrame = document.getElementById('preview-frame');
-        const generateBtn = document.getElementById('generate-btn');
-
-        // Extract unique songs for the left menu
-        const uniqueSongs = [...new Set(catalog.map(item => item.song))];
-
-        // Populate Songs (Left Column)
-        uniqueSongs.forEach(song => {
-            const label = document.createElement('label');
-            label.innerHTML = `<input type="checkbox" class="song-filter" value="${song}"> ${song}`;
-            songListContainer.appendChild(label);
-        });
-
-        // Event Listeners for Filters
-        document.querySelectorAll('.song-filter').forEach(cb => cb.addEventListener('change', updateAvailableParts));
-        instrumentSelect.addEventListener('change', updateAvailableParts);
-        partSelect.addEventListener('change', updateAvailableParts);
-
-        // --- 4. Core Application Logic ---
-
-        function updateAvailableParts() {
-            // Get selected filters
-            const checkedSongs = Array.from(document.querySelectorAll('.song-filter:checked')).map(cb => cb.value);
-            const selectedInstrument = instrumentSelect.value;
-            const selectedPart = partSelect.value;
-
-            availablePartsList.innerHTML = ''; // Clear list
-
-            // Check if all three criteria are selected
-            if (checkedSongs.length === 0 || !selectedInstrument || !selectedPart) {
-                availablePartsList.innerHTML = '<p style="color: #666; font-size: 14px;">Select songs, instrument, and part to see available music.</p>';
-                return;
+        function generateUUID() {
+            if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                return crypto.randomUUID();
             }
+            return 'f-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
+        }
 
-            // Filter catalog for selected songs AND instrument AND part
-            const matchingParts = catalog.filter(item => 
-                checkedSongs.includes(item.song) && 
-                item.instrument === selectedInstrument &&
-                item.partName === selectedPart
-            );
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return str;
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
 
-            if (matchingParts.length === 0) {
-                availablePartsList.innerHTML = '<p style="color: #dc3545; font-size: 14px;">No music found for this specific combination.</p>';
-                return;
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        function handleKeyClick(e, callback) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                callback(e);
             }
+        }
 
-            // Render matching parts
-            matchingParts.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'part-item';
-                div.innerHTML = `
-                    <div><strong>${item.song}</strong><br><small>${item.instrument} - ${item.partName}</small></div>
-                    <div class="btn-group">
-                        <button class="btn-preview" onclick="previewPdf('${item.file}')">Preview</button>
-                        <button class="btn-add" onclick="addToQueue('${item.song}', '${item.instrument}', '${item.partName}', '${item.file}')">Add</button>
-                    </div>
-                `;
-                availablePartsList.appendChild(div);
+        function setupModalAccessibility() {
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    const activeModals = ['auth-modal', 'forgot-modal', 'account-manager-modal'];
+                    for (const mId of activeModals) {
+                        const modal = document.getElementById(mId);
+                        if (modal && modal.style.display !== 'none' && mId !== 'auth-modal') {
+                            modal.style.display = 'none';
+                            break;
+                        }
+                    }
+                }
             });
         }
 
-        function previewPdf(filePath) {
-            previewFrame.src = filePath;
+        function isSafeCatalogPath(p) {
+            if (typeof p !== 'string') return false;
+            if (p.includes('..')) return false;
+            return /^pdfs\/[A-Za-z0-9_\-\/.]+\.pdf$/.test(p);
         }
 
-        function addToQueue(song, instrument, partName, file) {
-            // Prevent exact duplicates
-            const exists = compilationQueue.find(item => item.file === file);
-            if (exists) {
-                alert("This part is already in the cadet's booklet!");
+        function slugifyTransliterate(str) {
+            if (typeof str !== 'string') return '';
+            return str
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_+|_+$/g, '');
+        }
+
+        function tokenizeFilename(filename) {
+            if (typeof filename !== 'string') return [];
+            let nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
+            nameWithoutExt = nameWithoutExt.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const camelSplit = nameWithoutExt.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+            const rawTokens = camelSplit.split(/[^a-zA-Z0-9]+/);
+            return rawTokens.map(t => t.toLowerCase()).filter(t => t.length > 0);
+        }
+
+        function isSubsequenceContiguous(targetTokens, fileTokens) {
+            if (targetTokens.length === 0 || fileTokens.length === 0) return false;
+            for (let i = 0; i <= fileTokens.length - targetTokens.length; i++) {
+                let match = true;
+                for (let j = 0; j < targetTokens.length; j++) {
+                    if (fileTokens[i + j] !== targetTokens[j]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return true;
+            }
+            return false;
+        }
+
+        function matchPdfToPart(fileBuffers, instrument, partObj) {
+            const normInst = tokenizeFilename(instrument);
+            const partCodeToken = partObj.code.toLowerCase();
+            const normPartName = tokenizeFilename(partObj.name);
+
+            let bestMatch = null;
+            let bestScore = -1;
+
+            for (const f of fileBuffers) {
+                if (f.used) continue;
+                const tokens = f.tokens || tokenizeFilename(f.rawName);
+
+                let instMatched = false;
+                if (instrument === 'Percussion') {
+                    instMatched = tokens.some(t => ['percussion', 'drums', 'drum', 'perc'].includes(t));
+                } else if (instrument === 'Tenor Sax') {
+                    // Specific guard to prevent "Tenor Sax" matching "Alto Sax" or vice-versa
+                    instMatched = tokens.includes('tenor') && (tokens.includes('sax') || tokens.includes('saxophone'));
+                } else if (instrument === 'Alto Sax') {
+                    instMatched = tokens.includes('alto') && (tokens.includes('sax') || tokens.includes('saxophone'));
+                } else {
+                    instMatched = isSubsequenceContiguous(normInst, tokens);
+                }
+
+                if (!instMatched) continue;
+
+                let partMatched = false;
+                let partScore = 0;
+
+                const hasStandaloneCode = tokens.includes(partCodeToken);
+                let hasPartCodeSequence = false;
+                for (let i = 0; i < tokens.length - 1; i++) {
+                    if (tokens[i] === 'part' && tokens[i+1] === partCodeToken) {
+                        hasPartCodeSequence = true;
+                        break;
+                    }
+                }
+                const hasPartCodeCombined = tokens.includes('part' + partCodeToken);
+                const hasFullPartNameSeq = normPartName.length > 0 && isSubsequenceContiguous(normPartName, tokens);
+
+                if (instrument === 'Percussion' && partObj.name === 'Drums/Percussion') {
+                    partMatched = true;
+                    if (hasStandaloneCode || hasPartCodeSequence || hasPartCodeCombined || hasFullPartNameSeq) {
+                        partScore = 10;
+                    } else {
+                        partScore = 5;
+                    }
+                } else {
+                    // Pass 1: explicit Part X indicator or full part name sequence preferred over bare letter code
+                    if (hasPartCodeSequence || hasPartCodeCombined || hasFullPartNameSeq) {
+                        partMatched = true;
+                        partScore = 15;
+                    } else if (hasStandaloneCode) {
+                        partMatched = true;
+                        partScore = 8;
+                    }
+                }
+
+                if (partMatched && partScore > bestScore) {
+                    bestScore = partScore;
+                    bestMatch = f;
+                }
+            }
+
+            return bestMatch;
+        }
+
+        // --- 1. INDEXEDDB PDF BLOB STORAGE ---
+        const DB_NAME = "CadetMusicPDFStore";
+        const DB_VERSION = 1;
+        const STORE_NAME = "pdf_blobs";
+        let idbInstance = null;
+
+        function initIDB() {
+            return new Promise((resolve) => {
+                if (typeof indexedDB === 'undefined') {
+                    console.warn("IndexedDB is not supported/defined in this environment.");
+                    return resolve(null);
+                }
+                if (idbInstance) return resolve(idbInstance);
+                try {
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+                    request.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains(STORE_NAME)) {
+                            db.createObjectStore(STORE_NAME);
+                        }
+                    };
+                    request.onsuccess = (e) => {
+                        idbInstance = e.target.result;
+                        resolve(idbInstance);
+                    };
+                    request.onerror = (e) => {
+                        console.warn("IndexedDB failed to open, falling back.", e);
+                        resolve(null);
+                    };
+                } catch(e) {
+                    console.warn("IndexedDB initialization exception:", e);
+                    resolve(null);
+                }
+            });
+        }
+
+        async function storePdfBlob(pdfId, blobOrArrayBuffer) {
+            const db = await initIDB();
+            if (!db) return false;
+            return new Promise((resolve) => {
+                try {
+                    const tx = db.transaction(STORE_NAME, "readwrite");
+                    const store = tx.objectStore(STORE_NAME);
+                    const req = store.put(blobOrArrayBuffer, pdfId);
+                    req.onsuccess = () => resolve(true);
+                    req.onerror = () => resolve(false);
+                } catch(e) {
+                    console.error("IDB Put error:", e);
+                    resolve(false);
+                }
+            });
+        }
+
+        async function getPdfBlob(pdfId) {
+            const db = await initIDB();
+            if (!db) return null;
+            return new Promise((resolve) => {
+                try {
+                    const tx = db.transaction(STORE_NAME, "readonly");
+                    const store = tx.objectStore(STORE_NAME);
+                    const req = store.get(pdfId);
+                    req.onsuccess = () => resolve(req.result || null);
+                    req.onerror = () => resolve(null);
+                } catch(e) {
+                    resolve(null);
+                }
+            });
+        }
+
+        async function deletePdfBlob(pdfId) {
+            const db = await initIDB();
+            if (!db) return;
+            try {
+                const tx = db.transaction(STORE_NAME, "readwrite");
+                tx.objectStore(STORE_NAME).delete(pdfId);
+            } catch(e){}
+        }
+
+        // --- 2. WEBCRYPTO PASSWORD HASHING ---
+        async function hashPassword(password, saltHex, iterations = 100000) {
+            if (!crypto || !crypto.subtle) {
+                throw new Error("WebCrypto API is unavailable. Please ensure you are serving this app over HTTPS or localhost.");
+            }
+            const enc = new TextEncoder();
+            let salt;
+            if (saltHex) {
+                salt = new Uint8Array(saltHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            } else {
+                salt = crypto.getRandomValues(new Uint8Array(16));
+            }
+
+            const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits", "deriveKey"]);
+            const key = await crypto.subtle.deriveKey(
+                { name: "PBKDF2", salt: salt, iterations: iterations, hash: "SHA-256" },
+                keyMaterial,
+                { name: "AES-GCM", length: 256 },
+                true,
+                ["encrypt"]
+            );
+            const exported = await crypto.subtle.exportKey("raw", key);
+            const hashArray = Array.from(new Uint8Array(exported));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            const saltString = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
+            return { hash: hashHex, salt: saltString, iterations: iterations };
+        }
+
+        async function verifyPassword(password, storedHash, storedSalt, iterations = 100000) {
+            const res = await hashPassword(password, storedSalt, iterations);
+            return res.hash === storedHash;
+        }
+
+        // --- 3. BASE DEFAULT CATALOG ---
+        const initialCatalog = [
+            { id: "def-1", song: "Ceremonial Card", category: "Ceremonial", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_ceremonial_card.pdf" },
+            { id: "def-2", song: "Ceremonial Card", category: "Ceremonial", instrument: "Trumpet", partName: "Part B", file: "pdfs/Trumpet/B_ceremonial_card.pdf" },
+            { id: "def-3", song: "Ceremonial Card", category: "Ceremonial", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_ceremonial_card.pdf" },
+            { id: "def-4", song: "Ceremonial Card", category: "Ceremonial", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_ceremonial_card.pdf" },
+            { id: "def-5", song: "Ceremonial Card", category: "Ceremonial", instrument: "Percussion", partName: "Drums/Percussion", file: "pdfs/Percussion/A_ceremonial_card.pdf" },
+            { id: "def-6", song: "The Men of Harlech", category: "March", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_men_of_harlech.pdf" },
+            { id: "def-7", song: "The Men of Harlech", category: "March", instrument: "Clarinet", partName: "Part A", file: "pdfs/Clarinet/A_men_of_harlech.pdf" },
+            { id: "def-8", song: "The Men of Harlech", category: "March", instrument: "Trombone", partName: "Part A", file: "pdfs/Trombone/A_men_of_harlech.pdf" },
+            { id: "def-9", song: "Meet the Flintstones", category: "Novelty", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_meet_the_flintstones.pdf" },
+            { id: "def-10", song: "Meet the Flintstones", category: "Novelty", instrument: "Alto Sax", partName: "Part A", file: "pdfs/Alto_Sax/A_meet_the_flintstones.pdf" },
+            { id: "def-11", song: "Abide With Me", category: "Hymn", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_abide_with_me.pdf" },
+            { id: "def-12", song: "Abide With Me", category: "Hymn", instrument: "Tuba", partName: "Part A", file: "pdfs/Tuba/A_abide_with_me.pdf" },
+            { id: "def-13", song: "Colonel Bogey", category: "March", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_colonel_bogey.pdf" },
+            { id: "def-14", song: "Colonel Bogey", category: "March", instrument: "Flute", partName: "Part A", file: "pdfs/Flute/A_colonel_bogey.pdf" },
+            { id: "def-15", song: "Heart of Oak", category: "March", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_heart_of_oak.pdf" },
+            { id: "def-16", song: "Sunset", category: "Call / Bugle", instrument: "Trumpet", partName: "Part A", file: "pdfs/Trumpet/A_sunset.pdf" }
+        ];
+
+        // --- GLOBAL STATE ---
+        let currentAccount = null;
+        let currentAccountNormalized = null;
+        let currentUserRole = "user";
+        let isSignUpMode = false;
+        let uploadedPdfFiles = [];
+        let catalog = [];
+        let selectedSongs = [];
+        let compilationQueue = [];
+        let selectedAdminIds = new Set();
+        let activePreviewBlobUrl = null;
+        let adminRenderSeq = 0;
+
+        const ACCOUNTS_DB_KEY = "cadet_music_accounts_db_v2";
+
+        // --- EmailJS Setup ---
+        (function(){
+            try { 
+                if (window.emailjs && typeof window.emailjs.init === 'function') {
+                    emailjs.init({ publicKey: "KV-gkL2FKqMxCev85" });
+                }
+            } catch(e){}
+        })();
+
+        // --- INITIALIZATION ---
+        window.addEventListener('DOMContentLoaded', async () => {
+            setupModalAccessibility();
+            if (!crypto || !crypto.subtle) {
+                showToast("WebCrypto disabled or unsecure context (HTTP). Password operations will require HTTPS.", "warning");
+            }
+            await initIDB();
+            const activeSession = sessionStorage.getItem("cadet_active_user");
+            if (activeSession) {
+                await loginAccount(activeSession);
+            } else {
+                showAuthModal();
+            }
+        });
+
+        // --- ACCOUNT & AUTHENTICATION SYSTEM ---
+        function getAccountsDb() {
+            try {
+                const data = localStorage.getItem(ACCOUNTS_DB_KEY);
+                return data ? JSON.parse(data) : {};
+            } catch(e) {
+                console.error("Corrupted accounts DB", e);
+                return {};
+            }
+        }
+
+        function saveAccountsDb(db) {
+            try {
+                localStorage.setItem(ACCOUNTS_DB_KEY, JSON.stringify(db));
+            } catch(e) {
+                showToast("Failed to save account database: " + e.message, "error");
+            }
+        }
+
+        function normalizeAccountName(name) {
+            return slugifyTransliterate(name);
+        }
+
+        function hasAccount(normKey) {
+            const db = getAccountsDb();
+            return Object.hasOwn(db, normKey);
+        }
+
+        function getAccount(normKey) {
+            const db = getAccountsDb();
+            return Object.hasOwn(db, normKey) ? db[normKey] : null;
+        }
+
+        function isAdmin() {
+            return currentUserRole === "admin";
+        }
+
+        function requireAdmin() {
+            if (!isAdmin()) {
+                showToast("Administrative permissions required for this action.", "error");
+                return false;
+            }
+            return true;
+        }
+
+        function countAdminAccounts() {
+            const db = getAccountsDb();
+            let count = 0;
+            for (const key of Object.keys(db)) {
+                if (Object.hasOwn(db, key) && db[key].role === 'admin') {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        function showAuthModal() {
+            document.getElementById('auth-modal').style.display = 'flex';
+        }
+
+        function toggleAuthMode() {
+            isSignUpMode = !isSignUpMode;
+            document.getElementById('auth-title').textContent = isSignUpMode ? "Create New Account" : "Cadet Music Login";
+            document.getElementById('confirm-password-group').style.display = isSignUpMode ? "block" : "none";
+            document.getElementById('email-group').style.display = isSignUpMode ? "block" : "none";
+            document.getElementById('forgot-pw-link').style.display = isSignUpMode ? "none" : "inline";
+            document.getElementById('toggle-auth-mode').textContent = isSignUpMode ? "Back to Login" : "Create New Account";
+            document.getElementById('auth-submit-btn').textContent = isSignUpMode ? "Register & Login" : "Login to Library";
+        }
+
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            const btn = document.getElementById('auth-submit-btn');
+            btn.disabled = true;
+
+            try {
+                const accountNameRaw = document.getElementById('auth-account-name').value.trim();
+                const email = document.getElementById('auth-email').value.trim();
+                const password = document.getElementById('auth-password').value;
+                const confirmPw = document.getElementById('auth-confirm-password').value;
+
+                const normKey = normalizeAccountName(accountNameRaw);
+                if (!normKey || !password) {
+                    showToast("Account name and password required.", "warning");
+                    return;
+                }
+
+                const db = getAccountsDb();
+
+                if (isSignUpMode) {
+                    if (!email) {
+                        showToast("Email address is required for new accounts.", "warning");
+                        return;
+                    }
+                    if (password !== confirmPw) {
+                        showToast("Passwords do not match!", "error");
+                        return;
+                    }
+                    if (hasAccount(normKey)) {
+                        showToast("An account with this name already exists.", "error");
+                        return;
+                    }
+
+                    const hashRes = await hashPassword(password);
+                    db[normKey] = {
+                        displayName: accountNameRaw,
+                        hash: hashRes.hash,
+                        salt: hashRes.salt,
+                        iterations: hashRes.iterations,
+                        email: email,
+                        role: "admin",
+                        catalog: initialCatalog.map(c => ({...c, id: generateUUID()}))
+                    };
+                    saveAccountsDb(db);
+                    showToast("Account created successfully!", "success");
+                    await loginAccount(normKey);
+                } else {
+                    if (!hasAccount(normKey)) {
+                        showToast("Account not found.", "error");
+                        return;
+                    }
+                    const acc = db[normKey];
+                    const isValid = await verifyPassword(password, acc.hash, acc.salt, acc.iterations || 100000);
+                    if (!isValid) {
+                        showToast("Incorrect password!", "error");
+                        return;
+                    }
+                    await loginAccount(normKey);
+                }
+            } catch(err) {
+                console.error("Auth submit error:", err);
+                showToast("Authentication failed: " + err.message, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function loginAccount(normKey) {
+            clearUserState();
+            const acc = getAccount(normKey);
+            if (!acc) return showAuthModal();
+
+            currentAccountNormalized = normKey;
+            currentAccount = acc.displayName || normKey;
+            currentUserRole = acc.role || "user";
+
+            sessionStorage.setItem("cadet_active_user", normKey);
+            document.getElementById('current-account-display').textContent = currentAccount;
+            
+            const roleBadge = document.getElementById('role-badge');
+            roleBadge.textContent = currentUserRole.toUpperCase();
+            roleBadge.style.background = currentUserRole === "admin" ? "#dc3545" : "#007bff";
+
+            document.getElementById('auth-modal').style.display = 'none';
+
+            loadAccountCatalog();
+            await checkUrlImport();
+            updateCategoriesAndFilters();
+            renderUserSongs();
+            renderAdminTable();
+        }
+
+        function clearUserState() {
+            catalog = [];
+            selectedSongs = [];
+            compilationQueue = [];
+            selectedAdminIds.clear();
+            uploadedPdfFiles = [];
+
+            if (activePreviewBlobUrl) {
+                URL.revokeObjectURL(activePreviewBlobUrl);
+                activePreviewBlobUrl = null;
+            }
+
+            const iframe = document.getElementById('preview-frame');
+            if (iframe) iframe.src = 'about:blank';
+
+            const uploadedList = document.getElementById('uploaded-files-list');
+            if (uploadedList) uploadedList.innerHTML = '';
+
+            renderQueue();
+            updateBulkActionUi();
+        }
+
+        function logout() {
+            clearUserState();
+            sessionStorage.removeItem("cadet_active_user");
+            currentAccount = null;
+            currentAccountNormalized = null;
+            currentUserRole = "user";
+
+            document.getElementById('current-account-display').textContent = "Not Logged In";
+            const roleBadge = document.getElementById('role-badge');
+            roleBadge.textContent = "USER";
+            roleBadge.style.background = "#007bff";
+
+            isSignUpMode = true;
+            toggleAuthMode();
+
+            document.getElementById('auth-form').reset();
+            showAuthModal();
+            showToast("Logged out successfully.", "info");
+        }
+
+        function loadAccountCatalog() {
+            const acc = getAccount(currentAccountNormalized);
+            if (acc && Array.isArray(acc.catalog)) {
+                catalog = acc.catalog.map(item => {
+                    validateCatalogItem(item);
+                    return item;
+                });
+            } else {
+                catalog = initialCatalog.map(c => ({...c, id: generateUUID()}));
+            }
+        }
+
+        function saveCatalog() {
+            if (!currentAccountNormalized) return;
+            const db = getAccountsDb();
+            if (Object.hasOwn(db, currentAccountNormalized)) {
+                db[currentAccountNormalized].catalog = catalog;
+                saveAccountsDb(db);
+            }
+            updateCategoriesAndFilters();
+        }
+
+        function resetSelectionState() {
+            selectedAdminIds.clear();
+            const catalogIds = new Set(catalog.map(c => c.id));
+            compilationQueue = compilationQueue.filter(q => catalogIds.has(q.id));
+            const availableSongs = new Set(catalog.map(c => c.song));
+            selectedSongs = selectedSongs.filter(s => availableSongs.has(s));
+
+            renderQueue();
+            updateBulkActionUi();
+        }
+
+        async function cleanupOrphanedPdfBlobs(oldCatalog) {
+            if (!Array.isArray(oldCatalog)) return;
+            const db = getAccountsDb();
+            
+            const activeBlobsInOtherAccounts = new Set();
+            for (const accKey of Object.keys(db)) {
+                if (!Object.hasOwn(db, accKey)) continue;
+                if (accKey === currentAccountNormalized) continue;
+                const acc = db[accKey];
+                if (Array.isArray(acc.catalog)) {
+                    acc.catalog.forEach(item => {
+                        if (item.pdfStoreId) activeBlobsInOtherAccounts.add(item.pdfStoreId);
+                    });
+                }
+            }
+
+            // Treat current catalog as live as well
+            catalog.forEach(item => {
+                if (item.pdfStoreId) activeBlobsInOtherAccounts.add(item.pdfStoreId);
+            });
+
+            for (const item of oldCatalog) {
+                if (item.pdfStoreId && !activeBlobsInOtherAccounts.has(item.pdfStoreId)) {
+                    await deletePdfBlob(item.pdfStoreId);
+                }
+            }
+        }
+
+        async function resetToDefaultCatalog() {
+            if (!requireAdmin()) return;
+            if (confirm("Reset catalog back to defaults? All uploaded sheet music and added songs will be cleared.")) {
+                const oldCatalog = [...catalog];
+                catalog = initialCatalog.map(c => ({...c, id: generateUUID()}));
+                saveCatalog();
+                await cleanupOrphanedPdfBlobs(oldCatalog);
+                resetSelectionState();
+                renderUserSongs();
+                renderAdminTable();
+                showToast("Catalog reset to defaults.", "info");
+            }
+        }
+
+        // --- FORGOT PASSWORD WORKFLOW ---
+        function openForgotPasswordModal() {
+            document.getElementById('forgot-modal').style.display = 'flex';
+        }
+
+        function closeForgotPasswordModal() {
+            document.getElementById('forgot-modal').style.display = 'none';
+        }
+
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+            const btn = document.getElementById('forgot-pw-submit-btn');
+            btn.disabled = true;
+
+            try {
+                const rawName = document.getElementById('reset-account-name').value.trim();
+                const email = document.getElementById('reset-email').value.trim();
+                const normKey = normalizeAccountName(rawName);
+
+                if (!hasAccount(normKey)) {
+                    showToast("Account name not found.", "error");
+                    return;
+                }
+
+                const db = getAccountsDb();
+                const acc = db[normKey];
+
+                if (!acc.email || acc.email.toLowerCase() !== email.toLowerCase()) {
+                    showToast("Email does not match registered account email.", "error");
+                    return;
+                }
+
+                // 16 bytes for high entropy temp password
+                const array = new Uint8Array(16);
+                crypto.getRandomValues(array);
+                const tempPw = "cadet-" + Array.from(array, b => b.toString(16).padStart(2,'0')).join('');
+
+                if (window.emailjs && typeof window.emailjs.send === "function") {
+                    const response = await emailjs.send("service_st8fhlo", "template_dbe7zjp", {
+                        to_email: email,
+                        account_name: acc.displayName || rawName,
+                        temp_password: tempPw
+                    });
+
+                    console.log("EmailJS Success Response:", response);
+                    
+                    const newHash = await hashPassword(tempPw);
+                    acc.hash = newHash.hash;
+                    acc.salt = newHash.salt;
+                    acc.iterations = newHash.iterations;
+                    saveAccountsDb(db);
+
+                    showToast(`Temporary password sent to ${email}!`, "success");
+                    closeForgotPasswordModal();
+                } else {
+                    showToast("Email service library failed to load. Check your internet connection.", "error");
+                }
+            } catch(err) {
+                console.error("EmailJS Dispatch Error details:", err);
+                const errMsg = err?.text || err?.message || "Unknown error";
+                showToast(`Email failed: ${errMsg}`, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // --- ACCOUNT MANAGER MODAL ---
+        function openAccountManager() {
+            const acc = getAccount(currentAccountNormalized) || {};
+            document.getElementById('mgr-account-name').value = acc.displayName || currentAccount;
+            document.getElementById('mgr-email').value = acc.email || "";
+
+            const adminSection = document.getElementById('admin-account-management');
+            if (isAdmin()) {
+                adminSection.style.display = 'block';
+                renderAdminAccountsRoleList();
+            } else {
+                adminSection.style.display = 'none';
+            }
+
+            document.getElementById('account-manager-modal').style.display = 'flex';
+        }
+
+        function closeAccountManager() {
+            document.getElementById('account-manager-modal').style.display = 'none';
+        }
+
+        function renderAdminAccountsRoleList() {
+            const listDiv = document.getElementById('accounts-role-list');
+            listDiv.innerHTML = '';
+            const db = getAccountsDb();
+
+            for (const normKey of Object.keys(db)) {
+                if (!Object.hasOwn(db, normKey)) continue;
+                if (normKey === currentAccountNormalized) continue;
+
+                const acc = db[normKey];
+                const itemDiv = document.createElement('div');
+                itemDiv.style.display = 'flex';
+                itemDiv.style.justifyContent = 'space-between';
+                itemDiv.style.alignItems = 'center';
+                itemDiv.style.padding = '4px 0';
+                itemDiv.style.borderBottom = '1px solid #eee';
+
+                const label = document.createElement('span');
+                label.textContent = `${acc.displayName || normKey} (${(acc.role || 'user').toUpperCase()})`;
+
+                const btn = document.createElement('button');
+                btn.style.fontSize = '10px';
+                btn.style.padding = '2px 6px';
+                btn.className = 'btn-primary';
+
+                if (acc.role === 'admin') {
+                    btn.textContent = 'Demote to User';
+                    btn.onclick = () => toggleAccountRole(normKey, 'user');
+                } else {
+                    btn.textContent = 'Promote to Admin';
+                    btn.onclick = () => toggleAccountRole(normKey, 'admin');
+                }
+
+                itemDiv.appendChild(label);
+                itemDiv.appendChild(btn);
+                listDiv.appendChild(itemDiv);
+            }
+
+            if (listDiv.children.length === 0) {
+                listDiv.innerHTML = '<span style="color:#888;">No other accounts found.</span>';
+            }
+        }
+
+        function toggleAccountRole(targetNormKey, newRole) {
+            if (!requireAdmin()) return;
+            const db = getAccountsDb();
+            if (!Object.hasOwn(db, targetNormKey)) return;
+
+            if (newRole === 'user' && db[targetNormKey].role === 'admin') {
+                if (countAdminAccounts() <= 1) {
+                    showToast("Cannot demote account. At least one admin account is required.", "error");
+                    return;
+                }
+            }
+
+            db[targetNormKey].role = newRole;
+            saveAccountsDb(db);
+            showToast(`Updated ${db[targetNormKey].displayName} role to ${newRole.toUpperCase()}.`, "success");
+            renderAdminAccountsRoleList();
+        }
+
+        function updateAccountInfo() {
+            const newNameRaw = document.getElementById('mgr-account-name').value.trim();
+            const newEmail = document.getElementById('mgr-email').value.trim();
+            const newNormKey = normalizeAccountName(newNameRaw);
+
+            if (!newNameRaw || !newNormKey) {
+                showToast("Account name cannot be empty.", "warning");
                 return;
             }
 
-            compilationQueue.push({ song, instrument, partName, file });
-            renderQueue();
+            if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+                showToast("A valid email address is required to enable password resets.", "warning");
+                return;
+            }
+
+            const db = getAccountsDb();
+
+            if (newNormKey !== currentAccountNormalized) {
+                if (hasAccount(newNormKey)) {
+                    showToast("An account with this name already exists.", "error");
+                    return;
+                }
+                db[newNormKey] = db[currentAccountNormalized];
+                delete db[currentAccountNormalized];
+                currentAccountNormalized = newNormKey;
+                sessionStorage.setItem("cadet_active_user", newNormKey);
+            }
+
+            db[currentAccountNormalized].displayName = newNameRaw;
+            db[currentAccountNormalized].email = newEmail;
+            currentAccount = newNameRaw;
+            document.getElementById('current-account-display').textContent = currentAccount;
+
+            saveAccountsDb(db);
+            showToast("Account settings updated!", "success");
+            closeAccountManager();
         }
 
-        function removeFromQueue(index) {
-            compilationQueue.splice(index, 1);
+        async function changeAccountPassword() {
+            const curr = document.getElementById('mgr-curr-password').value;
+            const newPw = document.getElementById('mgr-new-password').value;
+
+            const acc = getAccount(currentAccountNormalized);
+
+            const isValid = await verifyPassword(curr, acc.hash, acc.salt, acc.iterations || 100000);
+            if (!isValid) {
+                showToast("Current password incorrect.", "error");
+                return;
+            }
+
+            if (!newPw) {
+                showToast("New password cannot be empty.", "warning");
+                return;
+            }
+
+            const db = getAccountsDb();
+            const newHashRes = await hashPassword(newPw);
+            db[currentAccountNormalized].hash = newHashRes.hash;
+            db[currentAccountNormalized].salt = newHashRes.salt;
+            db[currentAccountNormalized].iterations = newHashRes.iterations;
+            saveAccountsDb(db);
+
+            showToast("Password updated successfully!", "success");
+            document.getElementById('mgr-curr-password').value = "";
+            document.getElementById('mgr-new-password').value = "";
+        }
+
+        async function deleteCurrentAccount() {
+            if (isAdmin() && countAdminAccounts() <= 1) {
+                showToast("Cannot delete the only admin account. Promote another account to admin first.", "error");
+                return;
+            }
+
+            if (confirm(`Permanently delete account "${currentAccount}" and its music library?`)) {
+                const oldCatalog = [...catalog];
+                const db = getAccountsDb();
+                delete db[currentAccountNormalized];
+                saveAccountsDb(db);
+                await cleanupOrphanedPdfBlobs(oldCatalog);
+                closeAccountManager();
+                logout();
+            }
+        }
+
+        // --- NAVIGATION TABS ---
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.view-page').forEach(page => page.classList.remove('active'));
+
+            if (tab === 'assembler') {
+                document.getElementById('nav-btn-assembler').classList.add('active');
+                document.getElementById('page-assembler').classList.add('active');
+                renderUserSongs();
+            } else {
+                document.getElementById('nav-btn-admin').classList.add('active');
+                document.getElementById('page-admin').classList.add('active');
+                renderAdminTable();
+                updateCategoriesAndFilters();
+            }
+        }
+
+        // --- CATEGORIES MANAGEMENT ---
+        function getUniqueCategories() {
+            const categories = new Set();
+            catalog.forEach(item => {
+                if (item.category) categories.add(item.category);
+            });
+            return Array.from(categories).sort();
+        }
+
+        function updateCategoriesAndFilters() {
+            const categories = getUniqueCategories();
+
+            const userFilter = document.getElementById('category-filter');
+            const currentVal = userFilter.value;
+            userFilter.innerHTML = '<option value="">-- All Categories --</option>';
+            categories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                userFilter.appendChild(opt);
+            });
+            userFilter.value = currentVal;
+
+            const adminFilter = document.getElementById('admin-category-filter');
+            const currentAdminVal = adminFilter.value;
+            adminFilter.innerHTML = '<option value="">All Categories</option>';
+            categories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                adminFilter.appendChild(opt);
+            });
+            adminFilter.value = currentAdminVal;
+
+            const datalist = document.getElementById('category-suggestions');
+            datalist.innerHTML = '';
+            categories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                datalist.appendChild(opt);
+            });
+        }
+
+        // --- USER APP FUNCTIONS ---
+        function renderUserSongs() {
+            const container = document.getElementById('song-list');
+            const filterCat = document.getElementById('category-filter').value;
+            const searchTerm = document.getElementById('song-search').value.toLowerCase().trim();
+            container.innerHTML = '';
+
+            const uniqueSongsMap = new Map();
+            catalog.forEach(item => {
+                const matchesCat = !filterCat || item.category === filterCat;
+                const matchesSearch = !searchTerm || item.song.toLowerCase().includes(searchTerm);
+
+                if (matchesCat && matchesSearch) {
+                    if (!uniqueSongsMap.has(item.song)) {
+                        uniqueSongsMap.set(item.song, item.category || "General");
+                    }
+                }
+            });
+
+            if (uniqueSongsMap.size === 0) {
+                container.innerHTML = '<p style="color:#888; font-size:13px;">No songs found matching filter/search.</p>';
+                renderAvailableParts();
+                return;
+            }
+
+            uniqueSongsMap.forEach((cat, songName) => {
+                const isChecked = selectedSongs.includes(songName);
+                const label = document.createElement('label');
+                
+                const spanLeft = document.createElement('span');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = songName;
+                checkbox.checked = isChecked;
+                checkbox.onchange = () => toggleSongSelection(checkbox);
+
+                spanLeft.appendChild(checkbox);
+                spanLeft.appendChild(document.createTextNode(' ' + songName));
+
+                const spanBadge = document.createElement('span');
+                spanBadge.className = 'badge';
+                spanBadge.textContent = cat;
+
+                label.appendChild(spanLeft);
+                label.appendChild(spanBadge);
+                container.appendChild(label);
+            });
+
+            renderAvailableParts();
+        }
+
+        function toggleSongSelection(checkbox) {
+            if (checkbox.checked) {
+                if (!selectedSongs.includes(checkbox.value)) selectedSongs.push(checkbox.value);
+            } else {
+                selectedSongs = selectedSongs.filter(s => s !== checkbox.value);
+            }
+            renderAvailableParts();
+        }
+
+        function renderAvailableParts() {
+            const container = document.getElementById('available-parts-list');
+            const instrument = document.getElementById('instrument-select').value;
+
+            if (selectedSongs.length === 0 || !instrument) {
+                container.innerHTML = '<p style="color: #666; font-size: 14px;">Select songs and an instrument to see all available parts.</p>';
+                return;
+            }
+
+            const available = catalog.filter(item => 
+                selectedSongs.includes(item.song) && 
+                item.instrument === instrument
+            );
+
+            if (available.length === 0) {
+                container.innerHTML = '<p style="color: #dc3545; font-size: 14px;">No matching sheet music found for this instrument in selected songs.</p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            available.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'part-item';
+                
+                const infoDiv = document.createElement('div');
+                const titleElem = document.createElement('strong');
+                titleElem.textContent = item.song + ' ';
+                infoDiv.appendChild(titleElem);
+
+                if (item.pdfStoreId) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge-upload';
+                    badge.textContent = 'Custom Upload';
+                    infoDiv.appendChild(badge);
+                }
+
+                infoDiv.appendChild(document.createElement('br'));
+                const subText = document.createElement('small');
+                subText.style.color = '#666';
+                subText.textContent = item.instrument + ' - ' + item.partName;
+                infoDiv.appendChild(subText);
+
+                const btnGroup = document.createElement('div');
+                btnGroup.className = 'btn-group';
+
+                const btnPrev = document.createElement('button');
+                btnPrev.className = 'btn-preview';
+                btnPrev.textContent = 'Preview';
+                btnPrev.onclick = () => previewCatalogItem(item);
+
+                const btnAdd = document.createElement('button');
+                btnAdd.className = 'btn-add';
+                btnAdd.textContent = 'Add';
+                btnAdd.onclick = () => addToQueue(item);
+
+                btnGroup.appendChild(btnPrev);
+                btnGroup.appendChild(btnAdd);
+
+                div.appendChild(infoDiv);
+                div.appendChild(btnGroup);
+                container.appendChild(div);
+            });
+        }
+
+        async function previewCatalogItem(item) {
+            const iframe = document.getElementById('preview-frame');
+            if (activePreviewBlobUrl) {
+                URL.revokeObjectURL(activePreviewBlobUrl);
+                activePreviewBlobUrl = null;
+            }
+
+            if (item.pdfStoreId) {
+                const blobData = await getPdfBlob(item.pdfStoreId);
+                if (blobData) {
+                    const blob = blobData instanceof Blob ? blobData : new Blob([blobData], { type: 'application/pdf' });
+                    activePreviewBlobUrl = URL.createObjectURL(blob);
+                    iframe.src = activePreviewBlobUrl;
+                    return;
+                }
+            }
+            if (isSafeCatalogPath(item.file)) {
+                iframe.src = item.file;
+            } else {
+                showToast("Unsafe PDF file path blocked.", "error");
+                iframe.src = "about:blank";
+            }
+        }
+
+        function addToQueue(item) {
+            compilationQueue.push({ ...item, queueId: generateUUID() });
+            renderQueue();
+            showToast(`Added ${item.song} (${item.partName}) to booklet.`, "success");
+        }
+
+        function removeFromQueue(queueId) {
+            compilationQueue = compilationQueue.filter(item => item.queueId !== queueId);
             renderQueue();
         }
 
         function renderQueue() {
-            queueList.innerHTML = '';
-            
+            const container = document.getElementById('queue-list');
+            const genBtn = document.getElementById('generate-btn');
+
             if (compilationQueue.length === 0) {
-                queueList.innerHTML = '<p style="color: #666; font-size: 14px;">No parts added yet.</p>';
-                generateBtn.style.display = 'none';
+                container.innerHTML = '<p style="color: #666; font-size: 14px;">No parts added yet.</p>';
+                genBtn.style.display = 'none';
                 return;
             }
 
-            generateBtn.style.display = 'block';
-
-            compilationQueue.forEach((item, index) => {
+            container.innerHTML = '';
+            compilationQueue.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'part-item';
-                div.innerHTML = `
-                    <div><strong>${item.song}</strong><br><small>${item.instrument} - ${item.partName}</small></div>
-                    <button class="btn-remove" onclick="removeFromQueue(${index})">Remove</button>
+
+                const textDiv = document.createElement('div');
+                textDiv.innerHTML = `<strong>${escapeHtml(item.song)}</strong> - <small>${escapeHtml(item.instrument)} (${escapeHtml(item.partName)})</small>`;
+
+                const btnRemove = document.createElement('button');
+                btnRemove.className = 'btn-remove';
+                btnRemove.textContent = '✕';
+                btnRemove.onclick = () => removeFromQueue(item.queueId);
+
+                div.appendChild(textDiv);
+                div.appendChild(btnRemove);
+                container.appendChild(div);
+            });
+
+            genBtn.style.display = 'block';
+        }
+
+        async function generateCompilationPdf() {
+            if (compilationQueue.length === 0) return;
+
+            if (typeof PDFLib === 'undefined' || !PDFLib.PDFDocument) {
+                showToast("PDF library failed to load. Check your internet connection.", "error");
+                return;
+            }
+
+            const genBtn = document.getElementById('generate-btn');
+            const originalText = genBtn.textContent;
+            genBtn.disabled = true;
+            genBtn.textContent = "Generating...";
+
+            const failedFiles = [];
+            let successCount = 0;
+
+            try {
+                const pdfDoc = await PDFLib.PDFDocument.create();
+
+                for (const item of compilationQueue) {
+                    let loaded = false;
+                    try {
+                        let bytes = null;
+                        if (item.pdfStoreId) {
+                            const blobData = await getPdfBlob(item.pdfStoreId);
+                            if (blobData) {
+                                bytes = blobData instanceof ArrayBuffer ? blobData : await blobData.arrayBuffer();
+                            }
+                        }
+
+                        if (!bytes && isSafeCatalogPath(item.file)) {
+                            const response = await fetch(item.file);
+                            if (response.ok) {
+                                bytes = await response.arrayBuffer();
+                            }
+                        }
+
+                        if (bytes) {
+                            const loadedPdf = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+                            const copiedPages = await pdfDoc.copyPages(loadedPdf, loadedPdf.getPageIndices());
+                            copiedPages.forEach(page => pdfDoc.addPage(page));
+                            loaded = true;
+                            successCount++;
+                        }
+                    } catch(err) {
+                        console.warn("PDF compilation error for item:", item, err);
+                    }
+
+                    if (!loaded) {
+                        failedFiles.push(`${item.song} - ${item.instrument} (${item.partName})`);
+                    }
+                }
+
+                if (successCount === 0) {
+                    showToast("Failed to compile booklet. None of the selected PDFs could be loaded.", "error");
+                    return;
+                }
+
+                const pdfBytes = await pdfDoc.save();
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+
+                if (activePreviewBlobUrl) {
+                    URL.revokeObjectURL(activePreviewBlobUrl);
+                }
+                activePreviewBlobUrl = URL.createObjectURL(blob);
+
+                const iframe = document.getElementById('preview-frame');
+                iframe.src = activePreviewBlobUrl;
+
+                const link = document.createElement('a');
+                link.href = activePreviewBlobUrl;
+                link.download = `Cadet_Music_Booklet.pdf`;
+                link.click();
+
+                if (failedFiles.length > 0) {
+                    alert(`Booklet created with ${successCount} parts.\n\nThe following ${failedFiles.length} files could not be included:\n- ` + failedFiles.join("\n- "));
+                } else {
+                    showToast("Booklet compiled successfully!", "success");
+                }
+            } catch(e) {
+                showToast("Error generating PDF: " + e.message, "error");
+            } finally {
+                genBtn.disabled = false;
+                genBtn.textContent = originalText;
+            }
+        }
+
+        // --- MULTI-PDF UPLOAD & MATCHING SYSTEM ---
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('dragover');
+        }
+
+        function handleFileDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            if (e.dataTransfer.files) {
+                addUploadedFiles(Array.from(e.dataTransfer.files));
+            }
+        }
+
+        function handleFileSelect(e) {
+            if (e.target.files) {
+                addUploadedFiles(Array.from(e.target.files));
+            }
+        }
+
+        function addUploadedFiles(files) {
+            const rejectedFiles = [];
+            const addedPdfs = [];
+
+            for (const file of files) {
+                const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+                if (!isPdf) {
+                    rejectedFiles.push(file.name);
+                    continue;
+                }
+
+                const isDup = uploadedPdfFiles.some(f => 
+                    f.name === file.name && 
+                    f.size === file.size && 
+                    f.lastModified === file.lastModified
+                );
+
+                if (!isDup) {
+                    addedPdfs.push(file);
+                }
+            }
+
+            if (rejectedFiles.length > 0) {
+                showToast(`Rejected non-PDF files: ${rejectedFiles.join(', ')}`, "warning");
+            }
+
+            if (addedPdfs.length > 0) {
+                uploadedPdfFiles.push(...addedPdfs);
+                renderUploadedFilesList();
+                showToast(`Added ${addedPdfs.length} PDF file(s) for processing.`, "info");
+            }
+
+            const input = document.getElementById('pdf-file-input');
+            if (input) input.value = '';
+        }
+
+        function removeUploadedFile(index) {
+            uploadedPdfFiles.splice(index, 1);
+            renderUploadedFilesList();
+        }
+
+        function renderUploadedFilesList() {
+            const container = document.getElementById('uploaded-files-list');
+            container.innerHTML = '';
+            uploadedPdfFiles.forEach((file, idx) => {
+                const chip = document.createElement('div');
+                chip.className = 'file-chip';
+                chip.innerHTML = `
+                    <span>📄 <strong>${escapeHtml(file.name)}</strong> (${(file.size/1024).toFixed(1)} KB)</span>
+                    <button type="button" onclick="removeUploadedFile(${idx})" class="btn-remove" style="padding: 2px 6px; font-size:10px;">✕</button>
                 `;
-                queueList.appendChild(div);
+                container.appendChild(chip);
             });
         }
 
-        // --- 5. PDF Generation Logic ---
-        async function generateCompilationPdf() {
-            const { PDFDocument } = PDFLib;
-            
-            generateBtn.innerText = "Compiling... Please wait.";
-            generateBtn.disabled = true;
+        // --- ADMIN CREATE SONG & EXACT MATCHING ---
+        function togglePresetCustomization() {
+            const val = document.getElementById('admin-preset').value;
+            document.getElementById('custom-parts-group').style.display = (val === 'custom') ? 'block' : 'none';
+        }
+
+        async function handleCreateSong(e) {
+            e.preventDefault();
+            if (!requireAdmin()) return;
+
+            const submitBtn = document.getElementById('add-song-submit-btn');
+            submitBtn.disabled = true;
 
             try {
-                const mergedPdf = await PDFDocument.create();
+                let songNameInput = document.getElementById('admin-song-name').value.trim();
+                const category = document.getElementById('admin-category').value.trim();
+                const preset = document.getElementById('admin-preset').value;
+                const onlyMatched = document.getElementById('admin-only-matched').checked;
 
-                for (const item of compilationQueue) {
-                    const response = await fetch(item.file);
-                    if (!response.ok) {
-                        console.error(`Could not load ${item.file}.`);
-                        continue;
+                // Reuse existing casing if song exists
+                const existingEntry = catalog.find(c => c.song.toLowerCase() === songNameInput.toLowerCase());
+                const songName = existingEntry ? existingEntry.song : songNameInput;
+
+                const selectedInstruments = Array.from(document.querySelectorAll('.inst-check:checked')).map(cb => cb.value);
+
+                if (selectedInstruments.length === 0) {
+                    showToast("Please select at least one instrument.", "warning");
+                    return;
+                }
+
+                let parts = [];
+                if (preset === 'standard') {
+                    parts = [
+                        { name: "Part A", code: "A" },
+                        { name: "Part B", code: "B" },
+                        { name: "Part C", code: "C" },
+                        { name: "Part D", code: "D" },
+                    ];
+                } else if (preset === 'lead-only') {
+                    parts = [{ name: "Part A", code: "A" }];
+                } else {
+                    const customInput = document.getElementById('admin-custom-parts').value;
+                    const splitParts = customInput.split(',').map(p => p.trim()).filter(p => p.length > 0);
+                    if (splitParts.length === 0) {
+                        showToast("Please enter custom part names.", "warning");
+                        return;
                     }
-                    const existingPdfBytes = await response.arrayBuffer();
-                    const pdfToMerge = await PDFDocument.load(existingPdfBytes);
-                    
-                    const copiedPages = await mergedPdf.copyPages(pdfToMerge, pdfToMerge.getPageIndices());
-                    copiedPages.forEach(page => mergedPdf.addPage(page));
+                    parts = splitParts.map((p, idx) => ({ name: p, code: `P${idx+1}` }));
                 }
 
-                const pdfBytes = await mergedPdf.save();
-                
-                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                
-                // Generate filename based on the first item's instrument and part in the queue
-                let instTag = compilationQueue[0].instrument.replace('/', '_').replace(' ', '');
-                let partTag = compilationQueue[0].partName.replace(' ', '');
-                a.download = `Cadet_Booklet_${instTag}_${partTag}.pdf`;
-                
-                document.body.appendChild(a);
-                a.click();
-                
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-                // Optional: Clear queue for the next cadet
-                if(confirm("Booklet downloaded! Clear the list for the next cadet?")) {
-                    compilationQueue = [];
-                    renderQueue();
+                const fileBuffers = [];
+                for (const file of uploadedPdfFiles) {
+                    try {
+                        const buffer = await file.arrayBuffer();
+                        fileBuffers.push({
+                            rawName: file.name,
+                            tokens: tokenizeFilename(file.name),
+                            buffer: buffer,
+                            used: false
+                        });
+                    } catch(err){
+                        console.error("Error reading file buffer", err);
+                    }
                 }
 
-            } catch (error) {
-                console.error("Error generating PDF:", error);
-                alert("An error occurred merging the PDFs. Ensure you are running this on a local server.");
+                const cleanSongSlug = slugifyTransliterate(songName);
+                let addedCount = 0;
+                let skippedDuplicates = 0;
+                let skippedUnmatched = 0;
+                let matchedFilesSet = new Set();
+                let storageFailures = 0;
+
+                for (const inst of selectedInstruments) {
+                    const cleanInstFolder = inst.replace(/[^a-zA-Z0-9]/g, '_');
+
+                    const partsToIterate = (inst === 'Percussion') 
+                        ? [{ name: "Drums/Percussion", code: "A" }] 
+                        : parts;
+
+                    for (const partObj of partsToIterate) {
+                        const exists = catalog.some(c => 
+                            c.song.toLowerCase() === songName.toLowerCase() &&
+                            c.instrument === inst &&
+                            c.partName === partObj.name
+                        );
+
+                        if (exists) {
+                            skippedDuplicates++;
+                            continue;
+                        }
+
+                        const matchedFile = matchPdfToPart(fileBuffers, inst, partObj);
+
+                        if (onlyMatched && fileBuffers.length > 0 && !matchedFile) {
+                            skippedUnmatched++;
+                            continue;
+                        }
+
+                        let pdfStoreId = null;
+                        if (matchedFile) {
+                            const newPdfStoreId = "pdf-" + generateUUID();
+                            const storedOk = await storePdfBlob(newPdfStoreId, matchedFile.buffer);
+                            if (storedOk) {
+                                pdfStoreId = newPdfStoreId;
+                                matchedFile.used = true;
+                                matchedFilesSet.add(matchedFile);
+                            } else {
+                                storageFailures++;
+                                continue;
+                            }
+                        }
+
+                        catalog.push({
+                            id: generateUUID(),
+                            song: songName,
+                            category: category,
+                            instrument: inst,
+                            partName: partObj.name,
+                            file: `pdfs/${cleanInstFolder}/${partObj.code}_${cleanSongSlug}.pdf`,
+                            pdfStoreId: pdfStoreId
+                        });
+                        addedCount++;
+                    }
+                }
+
+                if (addedCount === 0) {
+                    let msg = "No parts were added.";
+                    if (skippedDuplicates > 0) msg += ` ${skippedDuplicates} duplicates were skipped.`;
+                    if (skippedUnmatched > 0) msg += ` ${skippedUnmatched} unmatched parts skipped.`;
+                    showToast(msg, "warning");
+                    return; // Retain form inputs and uploads list
+                }
+
+                saveCatalog();
+                renderAdminTable();
+                renderUserSongs();
+
+                const unmatchedPdfs = fileBuffers.filter(f => !f.used);
+                let msg = `Created ${addedCount} song parts (${matchedFilesSet.size} PDF files matched).`;
+                if (skippedDuplicates > 0) msg += ` ${skippedDuplicates} duplicates skipped.`;
+                if (skippedUnmatched > 0) msg += ` ${skippedUnmatched} unmatched parts skipped.`;
+                if (unmatchedPdfs.length > 0) {
+                    msg += ` Unmatched files: ${unmatchedPdfs.map(u => u.rawName).join(', ')}.`;
+                }
+
+                showToast(msg, unmatchedPdfs.length > 0 ? "warning" : "success");
+
+                if (storageFailures > 0) {
+                    showToast(`${storageFailures} part(s) could not be saved because PDF storage failed or is full.`, "error");
+                }
+
+                document.getElementById('add-song-form').reset();
+                uploadedPdfFiles = [];
+                renderUploadedFilesList();
+                togglePresetCustomization();
             } finally {
-                generateBtn.innerText = "Generate Booklet PDF";
-                generateBtn.disabled = false;
+                submitBtn.disabled = false;
             }
+        }
+
+        // --- ADMIN DIRECTORY & STABLE BULK ACTIONS ---
+        function onAdminFilterChange() {
+            selectedAdminIds.clear();
+            renderAdminTable();
+        }
+
+        async function renderAdminTable() {
+            const mySeq = ++adminRenderSeq;
+            const body = document.getElementById('admin-table-body');
+            const search = document.getElementById('admin-search-table').value.toLowerCase();
+            const filterCat = document.getElementById('admin-category-filter').value;
+
+            const filtered = catalog.filter(item => {
+                const matchesSearch = item.song.toLowerCase().includes(search) || 
+                                      item.instrument.toLowerCase().includes(search) ||
+                                      (item.category && item.category.toLowerCase().includes(search));
+                const matchesCat = !filterCat || item.category === filterCat;
+                return matchesSearch && matchesCat;
+            });
+
+            const idb = await initIDB();
+            const existingStoreIds = new Set();
+            if (idb) {
+                try {
+                    await new Promise((resolve) => {
+                        const tx = idb.transaction(STORE_NAME, "readonly");
+                        const store = tx.objectStore(STORE_NAME);
+                        const req = store.getAllKeys();
+                        req.onsuccess = () => {
+                            (req.result || []).forEach(k => existingStoreIds.add(k));
+                            resolve();
+                        };
+                        req.onerror = () => resolve();
+                    });
+                } catch(e){}
+            }
+
+            if (mySeq !== adminRenderSeq) return;
+
+            const frag = document.createDocumentFragment();
+
+            if (filtered.length === 0) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = '<td colspan="7" style="text-align:center; color:#888;">No items found in account library.</td>';
+                frag.appendChild(tr);
+            } else {
+                filtered.forEach((item) => {
+                    const isChecked = selectedAdminIds.has(item.id);
+                    let pdfStatus = '<span class="badge-default">Default Path</span>';
+
+                    if (item.pdfStoreId) {
+                        if (existingStoreIds.has(item.pdfStoreId)) {
+                            pdfStatus = '<span class="badge-upload">Uploaded PDF</span>';
+                        } else {
+                            pdfStatus = '<span class="badge-missing">Missing PDF</span>';
+                        }
+                    }
+
+                    const tr = document.createElement('tr');
+                    
+                    const tdCheck = document.createElement('td');
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'admin-item-check';
+                    cb.checked = isChecked;
+                    cb.onchange = (e) => toggleAdminItemSelect(item.id, e.target.checked);
+                    tdCheck.appendChild(cb);
+
+                    const tdSong = document.createElement('td');
+                    tdSong.innerHTML = `<strong>${escapeHtml(item.song)}</strong>`;
+
+                    const tdCat = document.createElement('td');
+                    tdCat.innerHTML = `<span class="badge">${escapeHtml(item.category || 'General')}</span>`;
+
+                    const tdInst = document.createElement('td');
+                    tdInst.textContent = item.instrument;
+
+                    const tdPart = document.createElement('td');
+                    tdPart.textContent = item.partName;
+
+                    const tdStatus = document.createElement('td');
+                    tdStatus.innerHTML = pdfStatus;
+
+                    const tdAction = document.createElement('td');
+                    const btnDel = document.createElement('button');
+                    btnDel.className = 'btn-remove';
+                    btnDel.style.fontSize = '11px';
+                    btnDel.style.padding = '3px 8px';
+                    btnDel.textContent = 'Delete';
+                    btnDel.onclick = () => deleteCatalogItem(item.id);
+                    tdAction.appendChild(btnDel);
+
+                    tr.appendChild(tdCheck);
+                    tr.appendChild(tdSong);
+                    tr.appendChild(tdCat);
+                    tr.appendChild(tdInst);
+                    tr.appendChild(tdPart);
+                    tr.appendChild(tdStatus);
+                    tr.appendChild(tdAction);
+
+                    frag.appendChild(tr);
+                });
+            }
+
+            body.replaceChildren(frag);
+            updateBulkActionUi();
+        }
+
+        function toggleAdminItemSelect(itemId, isChecked) {
+            if (isChecked) {
+                selectedAdminIds.add(itemId);
+            } else {
+                selectedAdminIds.delete(itemId);
+            }
+            updateBulkActionUi();
+        }
+
+        function getVisibleAdminItems() {
+            const search = document.getElementById('admin-search-table').value.toLowerCase();
+            const filterCat = document.getElementById('admin-category-filter').value;
+
+            return catalog.filter(item => {
+                const matchesSearch = item.song.toLowerCase().includes(search) || 
+                                      item.instrument.toLowerCase().includes(search) ||
+                                      (item.category && item.category.toLowerCase().includes(search));
+                const matchesCat = !filterCat || item.category === filterCat;
+                return matchesSearch && matchesCat;
+            });
+        }
+
+        function toggleSelectAllAdmin(selectAllCheckbox) {
+            const visibleItems = getVisibleAdminItems();
+
+            visibleItems.forEach(item => {
+                if (selectAllCheckbox.checked) {
+                    selectedAdminIds.add(item.id);
+                } else {
+                    selectedAdminIds.delete(item.id);
+                }
+            });
+
+            renderAdminTable();
+        }
+
+        function updateBulkActionUi() {
+            const countLabel = document.getElementById('selected-count-label');
+            const bulkBtn = document.getElementById('bulk-delete-btn');
+            const selectAllCb = document.getElementById('select-all-checkbox');
+            
+            const count = selectedAdminIds.size;
+            countLabel.textContent = `${count} part${count === 1 ? '' : 's'} selected`;
+
+            if (count > 0) {
+                bulkBtn.disabled = false;
+                bulkBtn.style.opacity = '1';
+                bulkBtn.style.cursor = 'pointer';
+            } else {
+                bulkBtn.disabled = true;
+                bulkBtn.style.opacity = '0.5';
+                bulkBtn.style.cursor = 'not-allowed';
+            }
+
+            if (selectAllCb) {
+                const visibleItems = getVisibleAdminItems();
+                if (visibleItems.length === 0) {
+                    selectAllCb.checked = false;
+                    selectAllCb.indeterminate = false;
+                } else {
+                    const visibleSelectedCount = visibleItems.filter(i => selectedAdminIds.has(i.id)).length;
+                    if (visibleSelectedCount === visibleItems.length) {
+                        selectAllCb.checked = true;
+                        selectAllCb.indeterminate = false;
+                    } else if (visibleSelectedCount > 0) {
+                        selectAllCb.checked = false;
+                        selectAllCb.indeterminate = true;
+                    } else {
+                        selectAllCb.checked = false;
+                        selectAllCb.indeterminate = false;
+                    }
+                }
+            }
+        }
+
+        async function deleteSelectedItems() {
+            if (!requireAdmin()) return;
+            const count = selectedAdminIds.size;
+            if (count === 0) return;
+
+            if (confirm(`Are you sure you want to delete ${count} selected music part(s)?`)) {
+                const oldCatalog = [...catalog];
+                catalog = catalog.filter(c => !selectedAdminIds.has(c.id));
+                saveCatalog();
+                await cleanupOrphanedPdfBlobs(oldCatalog);
+                resetSelectionState();
+                renderAdminTable();
+                renderUserSongs();
+                showToast(`Deleted ${count} items.`, "info");
+            }
+        }
+
+        async function deleteCatalogItem(itemId) {
+            if (!requireAdmin()) return;
+            const item = catalog.find(c => c.id === itemId);
+            if (!item) return;
+
+            if (confirm(`Remove "${item.song}" (${item.instrument} - ${item.partName})?`)) {
+                const oldCatalog = [...catalog];
+                catalog = catalog.filter(c => c.id !== itemId);
+                saveCatalog();
+                await cleanupOrphanedPdfBlobs(oldCatalog);
+                resetSelectionState();
+                renderAdminTable();
+                renderUserSongs();
+                showToast("Item deleted.", "info");
+            }
+        }
+
+        // --- SHARING & BACKUP ---
+        async function checkUrlImport() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sharedData = urlParams.get('catalogData');
+            if (!sharedData) return;
+
+            const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+            window.history.replaceState({}, document.title, cleanUrl);
+
+            if (!isAdmin()) {
+                showToast("Admin privileges required to import catalog shared link.", "info");
+                return;
+            }
+
+            try {
+                let jsonStr = "";
+                let base64Decoded = "";
+
+                try {
+                    base64Decoded = atob(decodeURIComponent(sharedData));
+                } catch(e) {
+                    base64Decoded = atob(sharedData);
+                }
+
+                if (base64Decoded.startsWith("DEF:")) {
+                    const binaryStr = base64Decoded.substring(4);
+                    const bytes = Uint8Array.from(binaryStr, c => c.charCodeAt(0));
+                    if (typeof DecompressionStream !== 'undefined') {
+                        const ds = new DecompressionStream('deflate-raw');
+                        const writer = ds.writable.getWriter();
+                        writer.write(bytes);
+                        writer.close();
+                        const response = new Response(ds.readable);
+                        jsonStr = await response.text();
+                    } else {
+                        showToast("Decompression unavailable in this browser.", "error");
+                        return;
+                    }
+                } else if (base64Decoded.startsWith("RAW:")) {
+                    const binaryStr = base64Decoded.substring(4);
+                    const bytes = Uint8Array.from(binaryStr, c => c.charCodeAt(0));
+                    jsonStr = new TextDecoder().decode(bytes);
+                } else {
+                    jsonStr = base64Decoded;
+                }
+
+                const decoded = JSON.parse(jsonStr);
+                if (!Array.isArray(decoded) || decoded.length === 0) {
+                    showToast("Shared catalog link contains no items.", "warning");
+                    return;
+                }
+
+                if (confirm(`Import shared catalog with ${decoded.length} items? WARNING: Shared links carry song metadata only, NOT uploaded PDF files. Importing will REPLACE your current catalog structure.`)) {
+                    // Do NOT clean up PDF blobs on share link import so existing stored PDFs are retained
+                    catalog = decoded.map(item => {
+                        validateCatalogItem(item);
+                        item.id = generateUUID();
+                        return item;
+                    });
+                    saveCatalog();
+                    resetSelectionState();
+                    renderAdminTable();
+                    renderUserSongs();
+                    showToast(`Imported ${catalog.length} items from shared link!`, "success");
+                }
+            } catch(e) {
+                console.error("URL Import error:", e);
+                showToast("Could not parse shared catalog link.", "error");
+            }
+        }
+
+        async function copyShareableUrl() {
+            try {
+                const cleanCatalog = catalog.map(({ id, pdfStoreId, ...rest }) => rest);
+                const jsonStr = JSON.stringify(cleanCatalog);
+
+                let compressedBase64 = "";
+                if (typeof CompressionStream !== 'undefined') {
+                    const cs = new CompressionStream('deflate-raw');
+                    const writer = cs.writable.getWriter();
+                    writer.write(new TextEncoder().encode(jsonStr));
+                    writer.close();
+                    const response = new Response(cs.readable);
+                    const buffer = await response.arrayBuffer();
+                    const bytes = new Uint8Array(buffer);
+                    let binaryStr = "";
+                    bytes.forEach(b => binaryStr += String.fromCharCode(b));
+                    compressedBase64 = "DEF:" + binaryStr;
+                } else {
+                    const utf8Bytes = new TextEncoder().encode(jsonStr);
+                    let binaryStr = "";
+                    utf8Bytes.forEach(b => binaryStr += String.fromCharCode(b));
+                    compressedBase64 = "RAW:" + binaryStr;
+                }
+
+                const base64Str = btoa(compressedBase64);
+                const encodedParam = encodeURIComponent(base64Str);
+
+                const cleanBaseUrl = window.location.href.split('?')[0].split('#')[0];
+                const shareUrl = `${cleanBaseUrl}?catalogData=${encodedParam}`;
+
+                if (shareUrl.length > 8000) {
+                    alert("Your catalog is too large to fit in a web link. Please use 'Save Backup File' instead.");
+                    return;
+                }
+
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    navigator.clipboard.writeText(shareUrl).then(() => {
+                        showToast("Share link copied to clipboard!", "success");
+                    }).catch(() => {
+                        prompt("Copy share URL:", shareUrl);
+                    });
+                } else {
+                    prompt("Copy share URL:", shareUrl);
+                }
+            } catch(e) {
+                showToast("Could not generate URL. Use backup file instead.", "error");
+            }
+        }
+
+        function arrayBufferToBase64Chunked(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+            }
+            return btoa(binary);
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        async function exportDatabaseFile() {
+            try {
+                const pdfStoreMap = {};
+                for (const item of catalog) {
+                    if (item.pdfStoreId && !pdfStoreMap[item.pdfStoreId]) {
+                        const blobData = await getPdfBlob(item.pdfStoreId);
+                        if (blobData) {
+                            const buffer = blobData instanceof ArrayBuffer ? blobData : await blobData.arrayBuffer();
+                            pdfStoreMap[item.pdfStoreId] = arrayBufferToBase64Chunked(buffer);
+                        }
+                    }
+                }
+
+                const backupObj = {
+                    version: 2,
+                    catalog: catalog,
+                    pdfs: pdfStoreMap
+                };
+
+                const jsonString = JSON.stringify(backupObj, null, 2);
+                const blob = new Blob([jsonString], { type: "application/json" });
+
+                if (blob.size > 50 * 1024 * 1024) {
+                    showToast("Backup file is large (>50MB). Exporting may take extra memory.", "warning");
+                }
+
+                const objectUrl = URL.createObjectURL(blob);
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", objectUrl);
+                downloadAnchor.setAttribute("download", `${currentAccount}_Music_Database.cadet`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+
+                setTimeout(() => {
+                    URL.revokeObjectURL(objectUrl);
+                }, 1000);
+
+                showToast("Backup downloaded!", "success");
+            } catch(e) {
+                showToast("Export failed: " + e.message, "error");
+            }
+        }
+
+        function validateCatalogItem(item) {
+            if (typeof item !== 'object' || !item) throw new Error("Invalid item structure.");
+            if (!item.id || typeof item.id !== 'string') item.id = generateUUID();
+            if (typeof item.song !== 'string') item.song = "Untitled Song";
+            if (item.song.length > 200) item.song = item.song.substring(0, 200);
+
+            if (typeof item.instrument !== 'string') item.instrument = "Trumpet";
+            if (item.instrument.length > 100) item.instrument = item.instrument.substring(0, 100);
+
+            if (typeof item.partName !== 'string') item.partName = "Part A";
+            if (item.partName.length > 100) item.partName = item.partName.substring(0, 100);
+
+            if (typeof item.category !== 'string') item.category = "General";
+            if (item.category.length > 100) item.category = item.category.substring(0, 100);
+
+            if (typeof item.file !== 'string' || !isSafeCatalogPath(item.file)) {
+                item.file = "pdfs/unknown.pdf";
+            }
+
+            if (item.pdfStoreId !== null && typeof item.pdfStoreId !== 'string') {
+                item.pdfStoreId = null;
+            }
+        }
+
+        async function importDatabaseFile(event) {
+            if (!requireAdmin()) return;
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const oldCatalog = [...catalog];
+                    const parsed = JSON.parse(e.target.result);
+                    let newCatalog = [];
+                    const idRemap = {};
+
+                    if (Array.isArray(parsed)) {
+                        newCatalog = parsed;
+                    } else if (parsed && parsed.version === 2 && Array.isArray(parsed.catalog)) {
+                        newCatalog = parsed.catalog;
+                        const pdfs = parsed.pdfs || {};
+
+                        for (const [oldPdfId, b64Data] of Object.entries(pdfs)) {
+                            try {
+                                const newPdfId = "pdf-" + generateUUID();
+                                idRemap[oldPdfId] = newPdfId;
+                                const arrayBuffer = base64ToArrayBuffer(b64Data);
+                                const savedOk = await storePdfBlob(newPdfId, arrayBuffer);
+                                if (!savedOk) {
+                                    console.warn(`Failed to write blob ${newPdfId}`);
+                                }
+                            } catch(err) {
+                                console.error("Error restoring PDF blob:", err);
+                            }
+                        }
+                    } else {
+                        showToast("Invalid backup file structure.", "error");
+                        return;
+                    }
+
+                    const seenIds = new Set();
+                    catalog = newCatalog.map(item => {
+                        validateCatalogItem(item);
+                        if (seenIds.has(item.id)) item.id = generateUUID();
+                        seenIds.add(item.id);
+
+                        if (item.pdfStoreId) {
+                            if (idRemap[item.pdfStoreId]) {
+                                item.pdfStoreId = idRemap[item.pdfStoreId];
+                            }
+                        }
+                        return item;
+                    });
+
+                    saveCatalog();
+                    await cleanupOrphanedPdfBlobs(oldCatalog);
+                    resetSelectionState();
+                    renderAdminTable();
+                    renderUserSongs();
+                    showToast("Music database loaded into account!", "success");
+                } catch(err) {
+                    showToast("Error reading database file: " + err.message, "error");
+                } finally {
+                    const input = document.getElementById('import-db-file');
+                    if (input) input.value = '';
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- TEST SUITE ---
+        function runFilenameMatcherTests() {
+            const results = [];
+            
+            function mockFile(rawName) {
+                return { rawName, tokens: tokenizeFilename(rawName), used: false };
+            }
+
+            // Test Case 1: ["Trumpet_Part_B.pdf", "Trumpet_Part_A.pdf"] -> A gets Part_A, B gets Part_B, C/D get nothing
+            {
+                const files = [mockFile("Trumpet_Part_B.pdf"), mockFile("Trumpet_Part_A.pdf")];
+                const parts = [
+                    { name: "Part A", code: "A" },
+                    { name: "Part B", code: "B" },
+                    { name: "Part C", code: "C" },
+                    { name: "Part D", code: "D" }
+                ];
+                const matches = parts.map(p => {
+                    const m = matchPdfToPart(files, "Trumpet", p);
+                    if (m) m.used = true;
+                    return m ? m.rawName : null;
+                });
+                results.push({ test: 1, expected: ["Trumpet_Part_A.pdf", "Trumpet_Part_B.pdf", null, null], got: matches });
+            }
+
+            // Test Case 2: ["Trumpet_Part_A.pdf"] only -> B, C, D get nothing
+            {
+                const files = [mockFile("Trumpet_Part_A.pdf")];
+                const parts = [{ name: "Part A", code: "A" }, { name: "Part B", code: "B" }];
+                const matches = parts.map(p => {
+                    const m = matchPdfToPart(files, "Trumpet", p);
+                    if (m) m.used = true;
+                    return m ? m.rawName : null;
+                });
+                results.push({ test: 2, expected: ["Trumpet_Part_A.pdf", null], got: matches });
+            }
+
+            // Test Case 3: ["Clarinet_Part_A.pdf"] -> Part C gets nothing
+            {
+                const files = [mockFile("Clarinet_Part_A.pdf")];
+                const m = matchPdfToPart(files, "Clarinet", { name: "Part C", code: "C" });
+                results.push({ test: 3, expected: null, got: m ? m.rawName : null });
+            }
+
+            // Test Case 4: ["Colonel_Bogey_Trumpet_A.pdf"] -> Part B gets nothing, Part A matches
+            {
+                const files = [mockFile("Colonel_Bogey_Trumpet_A.pdf")];
+                const mA = matchPdfToPart(files, "Trumpet", { name: "Part A", code: "A" });
+                if (mA) mA.used = true;
+                const mB = matchPdfToPart(files, "Trumpet", { name: "Part B", code: "B" });
+                results.push({ test: 4, expected: { A: "Colonel_Bogey_Trumpet_A.pdf", B: null }, got: { A: mA ? mA.rawName : null, B: mB ? mB.rawName : null } });
+            }
+
+            // Test Case 5: ["Percussion.pdf"] and ["Drums.pdf"] -> match Percussion part
+            {
+                const files1 = [mockFile("Percussion.pdf")];
+                const m1 = matchPdfToPart(files1, "Percussion", { name: "Drums/Percussion", code: "A" });
+                const files2 = [mockFile("Drums.pdf")];
+                const m2 = matchPdfToPart(files2, "Percussion", { name: "Drums/Percussion", code: "A" });
+                results.push({ test: 5, expected: ["Percussion.pdf", "Drums.pdf"], got: [m1 ? m1.rawName : null, m2 ? m2.rawName : null] });
+            }
+
+            // Test Case 6: ["Tenor_Sax_Part_A.pdf"] must not match Alto Sax
+            {
+                const files = [mockFile("Tenor_Sax_Part_A.pdf")];
+                const m = matchPdfToPart(files, "Alto Sax", { name: "Part A", code: "A" });
+                results.push({ test: 6, expected: null, got: m ? m.rawName : null });
+            }
+
+            // Test Case 7: Unmatched file "Tenor_Saxophone_Part_A.pdf" doesn't match "Tenor Sax"
+            {
+                const files = [mockFile("Tenor_Saxophone_Part_A.pdf")];
+                const m = matchPdfToPart(files, "Tenor Sax", { name: "Part A", code: "A" });
+                results.push({ test: 7, expected: "Tenor_Saxophone_Part_A.pdf", got: m ? m.rawName : null });
+            }
+
+            // Test Case 8: "A_Mighty_Fortress_Trumpet_Part_B.pdf" doesn't steal Part A
+            {
+                const files = [mockFile("A_Mighty_Fortress_Trumpet_Part_B.pdf")];
+                const mA = matchPdfToPart(files, "Trumpet", { name: "Part A", code: "A" });
+                if (mA) mA.used = true;
+                const mB = matchPdfToPart(files, "Trumpet", { name: "Part B", code: "B" });
+                results.push({ test: 8, expected: { A: null, B: "A_Mighty_Fortress_Trumpet_Part_B.pdf" }, got: { A: mA ? mA.rawName : null, B: mB ? mB.rawName : null } });
+            }
+
+            console.log("PDF Filename Matching Tests Results:", results);
+            return results;
         }
     </script>
 </body>
