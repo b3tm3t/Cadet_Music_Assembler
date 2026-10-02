@@ -40,4 +40,4 @@ def split_pdf_pages_horizontally(input_filename, output_filename="split_horizont
     print(f"Output saved to '{output_filename}' ({len(writer.pages)} total pages).")
 
 # Run the script on your file
-split_pdf_pages_horizontally("input.pdf")
+split_pdf_pages_horizontally("/Users/ben/Downloads/PDFSplitting/Joy to the WorldJ.pdf")
